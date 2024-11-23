@@ -129,29 +129,6 @@ func TestAppendBool(t *testing.T) {
 	}
 }
 
-func TestAppendExt(t *testing.T) {
-	tests := []struct {
-		typ  int8
-		data []byte
-		want []byte
-	}{
-		{1, []byte{0x01}, []byte{0xd4, 0x01, 0x01}},
-		{2, []byte{0x01, 0x02}, []byte{0xd5, 0x02, 0x01, 0x02}},
-		{3, []byte{0x01, 0x02, 0x03}, []byte{0xc7, 0x03, 0x03, 0x01, 0x02, 0x03}},
-		{4, []byte{0x01, 0x02, 0x03, 0x04}, []byte{0xd6, 0x04, 0x01, 0x02, 0x03, 0x04}},
-		{8, make([]byte, 8), append([]byte{0xd7, 0x08}, make([]byte, 8)...)},
-		{16, make([]byte, 16), append([]byte{0xd8, 0x10}, make([]byte, 16)...)},
-		{17, make([]byte, 17), append([]byte{0xc7, 0x11, 0x11}, make([]byte, 17)...)},
-	}
-	for _, tt := range tests {
-		dst := []byte{}
-		got := AppendExt(dst, tt.typ, tt.data)
-		if !bytes.Equal(got, tt.want) {
-			t.Errorf("AppendExt(%d, %x) = %x; want %x", tt.typ, tt.data, got, tt.want)
-		}
-	}
-}
-
 func TestAppendBinary(t *testing.T) {
 	tests := []struct {
 		data []byte
@@ -214,7 +191,7 @@ func TestAppendTimestamp(t *testing.T) {
 	testTime := time.Unix(1577836800, 0).UTC() // 2020-01-01 00:00:00 UTC
 	dst := []byte{}
 	got := AppendTimestamp(dst, testTime)
-	want := []byte{0xd6, 0xff, 0x5e, 0x0b, 0xc5, 0x80} // fixext4, -1, seconds
+	want := []byte{0xd6, 0xff, 0x5e, 0x0b, 0xe1, 0x00} // fixext4, -1, seconds
 
 	if !bytes.Equal(got, want) {
 		t.Errorf("AppendTimestamp(%v) = %x; want %x", testTime, got, want)
@@ -226,11 +203,11 @@ func TestAppendFunctionsCombined(t *testing.T) {
 	dst = AppendArray(dst, 4) // [tag, time, record, option]
 
 	// Append tag
-	tag := "myapp.access"
+	tag := "myapp.access" // 12 characters
 	dst = AppendString(dst, tag)
 
-	// Append timestamp as integer
-	now := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Append timestamp
+	now := time.Unix(1577836800, 0).UTC() // Fixed time
 	dst = AppendTimestamp(dst, now)
 
 	// Append record map with one key-value pair
@@ -241,12 +218,13 @@ func TestAppendFunctionsCombined(t *testing.T) {
 	// Append empty option map
 	dst = AppendMap(dst, 0)
 
-	// Expected bytes (manually computed)
+	// Expected bytes
 	want := []byte{
-		0x94, // array of 4 elements
-		0xad, // fixstr with length 13
-		'm', 'y', 'a', 'p', 'p', '.', 'a', 'c', 'c', 'e', 's', 's',
-		0xce, 0x5e, 0x0b, 0xc5, 0x80, // uint32 timestamp: 1577836800
+		0x94,                                                       // array of 4 elements
+		0xac,                                                       // fixstr with length 12
+		'm', 'y', 'a', 'p', 'p', '.', 'a', 'c', 'c', 'e', 's', 's', // "myapp.access"
+		0xd6, 0xff, // fixext4, -1
+		0x5e, 0x0b, 0xe1, 0x00, // seconds: 1577836800
 		0x81,                                    // map with one key-value pair
 		0xa7, 'm', 'e', 's', 's', 'a', 'g', 'e', // key: "message"
 		0xab, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', // value: "hello world"

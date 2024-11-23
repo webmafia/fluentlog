@@ -107,32 +107,6 @@ func AppendBool(dst []byte, b bool) []byte {
 	return append(dst, 0xc2)
 }
 
-func AppendExt(dst []byte, typ int8, data []byte) []byte {
-	l := len(data)
-	switch l {
-	case 1:
-		dst = append(dst, 0xd4, byte(typ))
-	case 2:
-		dst = append(dst, 0xd5, byte(typ))
-	case 4:
-		dst = append(dst, 0xd6, byte(typ))
-	case 8:
-		dst = append(dst, 0xd7, byte(typ))
-	case 16:
-		dst = append(dst, 0xd8, byte(typ))
-	default:
-		switch {
-		case l <= 0xFF:
-			dst = append(dst, 0xc7, byte(l), byte(typ))
-		case l <= 0xFFFF:
-			dst = append(dst, 0xc8, byte(l>>8), byte(l), byte(typ))
-		default:
-			dst = append(dst, 0xc9, byte(l>>24), byte(l>>16), byte(l>>8), byte(l), byte(typ))
-		}
-	}
-	return append(dst, data...)
-}
-
 func AppendBinary(dst []byte, data []byte) []byte {
 	l := len(data)
 	switch {
