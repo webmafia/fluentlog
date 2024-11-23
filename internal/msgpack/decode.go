@@ -151,22 +151,25 @@ func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 		if offset+1 >= len(src) {
 			return 0, offset, ErrShortBuffer
 		}
-		value = int64(int16(src[offset])<<8 | int16(src[offset+1]))
+		u := uint16(src[offset])<<8 | uint16(src[offset+1])
+		value = int64(int16(u))
 		offset += 2
 	case b == 0xd2:
 		// int32
 		if offset+3 >= len(src) {
 			return 0, offset, ErrShortBuffer
 		}
-		value = int64(int32(src[offset])<<24 | int32(src[offset+1])<<16 | int32(src[offset+2])<<8 | int32(src[offset+3]))
+		u := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
+		value = int64(int32(u))
 		offset += 4
 	case b == 0xd3:
 		// int64
 		if offset+7 >= len(src) {
 			return 0, offset, ErrShortBuffer
 		}
-		value = int64(src[offset])<<56 | int64(src[offset+1])<<48 | int64(src[offset+2])<<40 | int64(src[offset+3])<<32 |
-			int64(src[offset+4])<<24 | int64(src[offset+5])<<16 | int64(src[offset+6])<<8 | int64(src[offset+7])
+		u := uint64(src[offset])<<56 | uint64(src[offset+1])<<48 | uint64(src[offset+2])<<40 | uint64(src[offset+3])<<32 |
+			uint64(src[offset+4])<<24 | uint64(src[offset+5])<<16 | uint64(src[offset+6])<<8 | uint64(src[offset+7])
+		value = int64(u)
 		offset += 8
 	case b == 0xcc:
 		// uint8
@@ -187,7 +190,8 @@ func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 		if offset+3 >= len(src) {
 			return 0, offset, ErrShortBuffer
 		}
-		value = int64(uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3]))
+		u := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
+		value = int64(u)
 		offset += 4
 	case b == 0xcf:
 		// uint64
@@ -281,33 +285,31 @@ func ReadBool(src []byte, offset int) (value bool, newOffset int, err error) {
 	return value, offset, nil
 }
 
-// ReadEventTime reads an EventTime value from src starting at offset.
+// ReadTimestamp reads a timestamp value from src starting at offset.
 // It returns the time.Time value and the new offset after reading.
-func ReadEventTime(src []byte, offset int) (t time.Time, newOffset int, err error) {
+func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err error) {
 	if offset >= len(src) {
 		return time.Time{}, offset, ErrShortBuffer
 	}
 	b := src[offset]
 	offset++
-	if b != 0xd7 {
-		return time.Time{}, offset, fmt.Errorf("expected fixext8 (0xd7), got 0x%02x", b)
+	if b != 0xd6 {
+		return time.Time{}, offset, fmt.Errorf("expected fixext4 (0xd6), got 0x%02x", b)
 	}
 	if offset >= len(src) {
 		return time.Time{}, offset, ErrShortBuffer
 	}
 	typ := src[offset]
 	offset++
-	if typ != 0x00 {
-		return time.Time{}, offset, fmt.Errorf("expected EventTime type (0x00), got 0x%02x", typ)
+	if typ != 0xff {
+		return time.Time{}, offset, fmt.Errorf("expected timestamp type (-1), got 0x%02x", typ)
 	}
-	if offset+7 >= len(src) {
+	if offset+3 >= len(src) {
 		return time.Time{}, offset, ErrShortBuffer
 	}
 	sec := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
 	offset += 4
-	nsec := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
-	offset += 4
-	t = time.Unix(int64(sec), int64(nsec)).UTC()
+	t = time.Unix(int64(sec), 0).UTC()
 	return t, offset, nil
 }
 
@@ -373,7 +375,7 @@ func ReadExt(src []byte, offset int) (typ int8, data []byte, newOffset int, err 
 	return typ, data, offset, nil
 }
 
-// ReadBinary reads a binary data from src starting at offset.
+// ReadBinary reads binary data from src starting at offset.
 // It returns the data and the new offset after reading.
 func ReadBinary(src []byte, offset int) (data []byte, newOffset int, err error) {
 	if offset >= len(src) {
