@@ -48,51 +48,55 @@ func AppendString(dst []byte, s string) []byte {
 
 func AppendInt(dst []byte, i int64) []byte {
 	if i >= 0 {
-		switch {
-		case i <= 127:
-			// Positive fixint
-			return append(dst, byte(i))
-		case i <= 255:
-			// uint8
-			dst = append(dst, 0xcc)
-			return append(dst, byte(i))
-		case i <= 65535:
-			// uint16
-			dst = append(dst, 0xcd)
-			return append(dst, byte(i>>8), byte(i))
-		case i <= 4294967295:
-			// uint32
-			dst = append(dst, 0xce)
-			return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-		default:
-			// uint64
-			dst = append(dst, 0xcf)
-			return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
-				byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-		}
-	} else {
-		switch {
-		case i >= -32:
-			// Negative fixint
-			return append(dst, 0xe0|byte(i+32))
-		case i >= -128:
-			// int8
-			dst = append(dst, 0xd0)
-			return append(dst, byte(i))
-		case i >= -32768:
-			// int16
-			dst = append(dst, 0xd1)
-			return append(dst, byte(i>>8), byte(i))
-		case i >= -2147483648:
-			// int32
-			dst = append(dst, 0xd2)
-			return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-		default:
-			// int64
-			dst = append(dst, 0xd3)
-			return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
-				byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-		}
+		return AppendUint(dst, uint64(i))
+	}
+
+	switch {
+	case i >= -32:
+		// Negative fixint
+		return append(dst, 0xe0|byte(i+32))
+	case i >= -128:
+		// int8
+		dst = append(dst, 0xd0)
+		return append(dst, byte(i))
+	case i >= -32768:
+		// int16
+		dst = append(dst, 0xd1)
+		return append(dst, byte(i>>8), byte(i))
+	case i >= -2147483648:
+		// int32
+		dst = append(dst, 0xd2)
+		return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	default:
+		// int64
+		dst = append(dst, 0xd3)
+		return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
+			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	}
+}
+
+func AppendUint(dst []byte, i uint64) []byte {
+	switch {
+	case i <= 127:
+		// Positive fixint
+		return append(dst, byte(i))
+	case i <= 255:
+		// uint8
+		dst = append(dst, 0xcc)
+		return append(dst, byte(i))
+	case i <= 65535:
+		// uint16
+		dst = append(dst, 0xcd)
+		return append(dst, byte(i>>8), byte(i))
+	case i <= 4294967295:
+		// uint32
+		dst = append(dst, 0xce)
+		return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	default:
+		// uint64
+		dst = append(dst, 0xcf)
+		return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
+			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	}
 }
 

@@ -103,6 +103,36 @@ func TestAppendInt(t *testing.T) {
 	}
 }
 
+func TestAppendUint(t *testing.T) {
+	tests := []struct {
+		u    uint64
+		want []byte
+	}{
+		// Positive FixInt
+		{0, []byte{0x00}},
+		{127, []byte{0x7f}},
+		// uint8
+		{128, []byte{0xcc, 0x80}},
+		{255, []byte{0xcc, 0xff}},
+		// uint16
+		{256, []byte{0xcd, 0x01, 0x00}},
+		{65535, []byte{0xcd, 0xff, 0xff}},
+		// uint32
+		{65536, []byte{0xce, 0x00, 0x01, 0x00, 0x00}},
+		{4294967295, []byte{0xce, 0xff, 0xff, 0xff, 0xff}},
+		// uint64
+		{4294967296, []byte{0xcf, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}},
+		{18446744073709551615, []byte{0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}}, // Max uint64
+	}
+	for _, tt := range tests {
+		dst := []byte{}
+		got := AppendUint(dst, tt.u)
+		if !bytes.Equal(got, tt.want) {
+			t.Errorf("AppendUint(%v) = %x; want %x", tt.u, got, tt.want)
+		}
+	}
+}
+
 func TestAppendNil(t *testing.T) {
 	dst := []byte{}
 	got := AppendNil(dst)
