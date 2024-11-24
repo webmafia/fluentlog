@@ -101,14 +101,14 @@ func (msg *Message) AddField(key string, value any) error {
 		msg.buf = msgpack.AppendTimestamp(msg.buf, v)
 	case []byte:
 		msg.buf = msgpack.AppendBinary(msg.buf, v)
-	case msgpack.TextAppender:
+	case internal.TextAppender:
 		msg.buf = msgpack.AppendTextAppender(msg.buf, v)
 	case encoding.TextMarshaler:
 		val, _ := v.MarshalText()
 		msg.buf = msgpack.AppendString(msg.buf, internal.B2S(val))
 	case fmt.Stringer:
 		msg.buf = msgpack.AppendString(msg.buf, v.String())
-	case msgpack.BinaryAppender:
+	case internal.BinaryAppender:
 		msg.buf = msgpack.AppendBinaryAppender(msg.buf, v)
 	case encoding.BinaryMarshaler:
 		val, _ := v.MarshalBinary()

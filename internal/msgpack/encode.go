@@ -3,6 +3,8 @@ package msgpack
 import (
 	"math"
 	"time"
+
+	"github.com/webmafia/fluentlog/internal"
 )
 
 func AppendArray(dst []byte, n int) []byte {
@@ -46,7 +48,7 @@ func AppendString(dst []byte, s string) []byte {
 	return append(dst, s...)
 }
 
-func AppendTextAppender(dst []byte, s TextAppender) []byte {
+func AppendTextAppender(dst []byte, s internal.TextAppender) []byte {
 	return AppendUnknownString(dst, func(dst []byte) []byte {
 		dst, _ = s.AppendText(dst)
 		return dst
@@ -150,7 +152,7 @@ func AppendBinary(dst []byte, data []byte) []byte {
 	return append(dst, data...)
 }
 
-func AppendBinaryAppender(dst []byte, s BinaryAppender) []byte {
+func AppendBinaryAppender(dst []byte, s internal.BinaryAppender) []byte {
 	return AppendUnknownBinary(dst, func(dst []byte) []byte {
 		dst, _ = s.AppendBinary(dst)
 		return dst
