@@ -1,13 +1,13 @@
 package fluentlog
 
 import (
-	"encoding/binary"
+	"encoding"
 	"errors"
 	"fmt"
-	"iter"
 	"reflect"
 	"time"
 
+	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
@@ -15,55 +15,65 @@ type Message struct {
 	buf []byte
 }
 
-func NewMessage(tag string) Message {
+func NewMessage(tag string, ts time.Time) Message {
 	msg := Message{
 		buf: make([]byte, 0, 1024),
 	}
 
-	// Append array header for an array of 3 elements: [tag, timestamp, record]
-	msg.buf = msgpack.AppendArray(msg.buf, 3)
-
-	// Append tag
-	msg.buf = msgpack.AppendString(msg.buf, tag)
-
-	// Append timestamp
-	msg.buf = msgpack.AppendTimestamp(msg.buf, time.Now())
-
-	// Append initial map header (fixmap with zero elements)
-	msg.buf = append(msg.buf, 0x80) // fixmap with zero elements
+	msg.Reset(tag, ts)
 
 	return msg
 }
 
-func (msg *Message) Reset(tag string) {
+func (msg *Message) Reset(tag string, ts time.Time) {
 	msg.buf = msg.buf[:0]
-	// Reinitialize the message as in NewMessage
 	msg.buf = msgpack.AppendArray(msg.buf, 3)
 	msg.buf = msgpack.AppendString(msg.buf, tag)
-	msg.buf = msgpack.AppendTimestamp(msg.buf, time.Now())
-	// Append initial map header (fixmap with zero elements)
-	msg.buf = append(msg.buf, 0x80) // fixmap with zero elements
+	msg.buf = msgpack.AppendTimestamp(msg.buf, ts)
+	msg.buf = msgpack.AppendMap(msg.buf, 0)
 }
 
-// NumFields reads the number of fields in the map directly from the buffer at position 11
+func (msg *Message) Data() (tag, ts, fields Value) {
+	_, off, _ := msgpack.ReadArrayHeader(msg.buf, 0)
+
+	l, _ := msgpack.GetMsgpackValueLength(msg.buf[off:])
+	tag = msg.buf[off : off+l]
+	off += l
+
+	l, _ = msgpack.GetMsgpackValueLength(msg.buf[off:])
+	ts = msg.buf[off : off+l]
+	off += l
+
+	l, _ = msgpack.GetMsgpackValueLength(msg.buf[off:])
+	fields = msg.buf[off : off+l]
+
+	return
+}
+
+func (msg *Message) Tag() string {
+	tag, _, _ := msg.Data()
+	return tag.Str()
+}
+
+func (msg *Message) Time() time.Time {
+	_, ts, _ := msg.Data()
+	return ts.Time()
+}
+
+func (msg *Message) Fields() Value {
+	_, _, fields := msg.Data()
+	return fields
+}
+
 func (msg *Message) NumFields() int {
-	switch msg.buf[11] {
-	case 0x80: // fixmap with 0 fields
-		return 0
-	case 0x8f: // fixmap with 15 fields
-		return 15
-	case 0xde: // map16, up to (2^16 - 1) fields
-		return int(binary.BigEndian.Uint16(msg.buf[12:14]))
-	case 0xdf: // map32, up to (2^32 - 1) fields
-		return int(binary.BigEndian.Uint32(msg.buf[12:16]))
-	default:
-		return int(msg.buf[11] & 0x0f) // fixmap with fields 1–14
-	}
+	return msg.Fields().Len()
 }
 
 func (msg *Message) AddField(key string, value any) error {
+
 	// Find the map header position and the current number of fields
 	mapHeaderPos, numFields, err := msg.findMapHeader()
+
 	if err != nil {
 		return err
 	}
@@ -89,8 +99,24 @@ func (msg *Message) AddField(key string, value any) error {
 		msg.buf = msgpack.AppendNil(msg.buf)
 	case time.Time:
 		msg.buf = msgpack.AppendTimestamp(msg.buf, v)
+	case []byte:
+		msg.buf = msgpack.AppendBinary(msg.buf, v)
+	case msgpack.TextAppender:
+		msg.buf = msgpack.AppendTextAppender(msg.buf, v)
+	case encoding.TextMarshaler:
+		val, _ := v.MarshalText()
+		msg.buf = msgpack.AppendString(msg.buf, internal.B2S(val))
+	case fmt.Stringer:
+		msg.buf = msgpack.AppendString(msg.buf, v.String())
+	case msgpack.BinaryAppender:
+		msg.buf = msgpack.AppendBinaryAppender(msg.buf, v)
+	case encoding.BinaryMarshaler:
+		val, _ := v.MarshalBinary()
+		msg.buf = msgpack.AppendBinary(msg.buf, val)
 	default:
-		return errors.New("unsupported value type")
+		msg.buf = msgpack.AppendUnknownString(msg.buf, func(dst []byte) []byte {
+			return fmt.Appendf(dst, "%v", v)
+		})
 	}
 
 	// Increment the number of fields
@@ -98,6 +124,7 @@ func (msg *Message) AddField(key string, value any) error {
 
 	// Update the map header at mapHeaderPos
 	err = msg.updateMapHeader(mapHeaderPos, numFields)
+
 	if err != nil {
 		return err
 	}
@@ -164,100 +191,6 @@ func (msg *Message) updateMapHeader(mapHeaderPos int, numFields int) error {
 	copy(msg.buf[mapHeaderPos:], newHeader)
 
 	return nil
-}
-
-func (msg *Message) Fields() iter.Seq2[string, any] {
-	return func(yield func(string, any) bool) {
-		var err error
-		var offset int
-
-		// Read the array header
-		if _, offset, err = msgpack.ReadArrayHeader(msg.buf, offset); err != nil {
-			return
-		}
-
-		// Skip the tag
-		if _, offset, err = msgpack.ReadString(msg.buf, offset); err != nil {
-			return
-		}
-
-		// Skip the timestamp
-		if _, offset, err = msgpack.ReadTimestamp(msg.buf, offset); err != nil {
-			return
-		}
-		// Read the map header
-		numFields, offset, err := msgpack.ReadMapHeader(msg.buf, offset)
-		if err != nil {
-			return
-		}
-		for i := 0; i < numFields; i++ {
-			// Read key
-			var key string
-
-			if key, offset, err = msgpack.ReadString(msg.buf, offset); err != nil {
-				return
-			}
-			// Read value
-			if offset >= len(msg.buf) {
-				return
-			}
-			b := msg.buf[offset]
-			var value any
-			switch {
-			case b >= 0xa0 && b <= 0xbf, b == 0xd9, b == 0xda, b == 0xdb:
-				// String
-				value, offset, err = msgpack.ReadString(msg.buf, offset)
-			case b <= 0x7f, b >= 0xe0, b == 0xcc, b == 0xcd, b == 0xce, b == 0xcf, b == 0xd0, b == 0xd1, b == 0xd2, b == 0xd3:
-				// Integer
-				value, offset, err = msgpack.ReadInt(msg.buf, offset)
-			case b == 0xca:
-				// Float32
-				value, offset, err = msgpack.ReadFloat32(msg.buf, offset)
-			case b == 0xcb:
-				// Float64
-				value, offset, err = msgpack.ReadFloat64(msg.buf, offset)
-			case b == 0xc2, b == 0xc3:
-				// Boolean
-				value, offset, err = msgpack.ReadBool(msg.buf, offset)
-			case b == 0xc0:
-				// Nil
-				value = nil
-				offset, err = msgpack.ReadNil(msg.buf, offset)
-			case b == 0xd6, b == 0xd7, b == 0xd8:
-				// Extension types (could be timestamp)
-				typ, data, newOffset, err := msgpack.ReadExt(msg.buf, offset)
-				if err != nil {
-					return
-				}
-				offset = newOffset
-				if typ == -1 {
-					// Timestamp
-					if len(data) == 4 {
-						sec := int64(binary.BigEndian.Uint32(data))
-						value = time.Unix(sec, 0).UTC()
-					} else if len(data) == 8 {
-						sec := int64(binary.BigEndian.Uint64(data))
-						value = time.Unix(sec, 0).UTC()
-					} else {
-						// Handle other timestamp formats if needed
-						value = data
-					}
-				} else {
-					// Other extension types
-					value = data
-				}
-			default:
-				// Unsupported type
-				return
-			}
-			if err != nil {
-				return
-			}
-			if !yield(key, value) {
-				break
-			}
-		}
-	}
 }
 
 func (msg *Message) findMapHeader() (mapHeaderPos int, numFields int, err error) {

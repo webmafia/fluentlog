@@ -46,6 +46,32 @@ func AppendString(dst []byte, s string) []byte {
 	return append(dst, s...)
 }
 
+func AppendTextAppender(dst []byte, s TextAppender) []byte {
+	return AppendUnknownString(dst, func(dst []byte) []byte {
+		dst, _ = s.AppendText(dst)
+		return dst
+	})
+}
+
+func AppendUnknownString(dst []byte, fn func(dst []byte) []byte) []byte {
+
+	// We don't know the length of the string, so assume the longest possible string.
+	start := len(dst)
+	dst = append(dst, 0xdb, 0, 0, 0, 0)
+	sizeFrom := len(dst)
+	dst = fn(dst)
+	sizeTo := len(dst)
+	l := sizeTo - sizeFrom
+
+	// Now we know how many bytes that were appended - update the head accordingly.
+	dst[start+1] = byte(l >> 24)
+	dst[start+2] = byte(l >> 16)
+	dst[start+3] = byte(l >> 8)
+	dst[start+4] = byte(l)
+
+	return dst
+}
+
 func AppendInt(dst []byte, i int64) []byte {
 	if i >= 0 {
 		return AppendUint(dst, uint64(i))
@@ -122,6 +148,32 @@ func AppendBinary(dst []byte, data []byte) []byte {
 		dst = append(dst, 0xc6, byte(l>>24), byte(l>>16), byte(l>>8), byte(l))
 	}
 	return append(dst, data...)
+}
+
+func AppendBinaryAppender(dst []byte, s BinaryAppender) []byte {
+	return AppendUnknownBinary(dst, func(dst []byte) []byte {
+		dst, _ = s.AppendBinary(dst)
+		return dst
+	})
+}
+
+func AppendUnknownBinary(dst []byte, fn func(dst []byte) []byte) []byte {
+
+	// We don't know the length of the binary, so assume the longest possible binary.
+	start := len(dst)
+	dst = append(dst, 0xc6, 0, 0, 0, 0)
+	sizeFrom := len(dst)
+	dst = fn(dst)
+	sizeTo := len(dst)
+	l := sizeTo - sizeFrom
+
+	// Now we know how many bytes that were appended - update the head accordingly.
+	dst[start+1] = byte(l >> 24)
+	dst[start+2] = byte(l >> 16)
+	dst[start+3] = byte(l >> 8)
+	dst[start+4] = byte(l)
+
+	return dst
 }
 
 func AppendFloat32(dst []byte, f float32) []byte {

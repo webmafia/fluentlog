@@ -2,10 +2,67 @@ package msgpack
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"testing"
 	"time"
 )
+
+func Example() {
+	var b []byte
+	b = AppendArray(b, 3)
+	b = AppendString(b, "foo.bar")
+	b = AppendTimestamp(b, time.Now())
+	b = AppendMap(b, 3)
+
+	b = AppendString(b, "a")
+	b = AppendBool(b, true)
+
+	b = AppendString(b, "b")
+	b = AppendInt(b, 123)
+
+	b = AppendString(b, "c")
+	b = AppendFloat64(b, 456.789)
+
+	fmt.Println(len(b), ":", b)
+	fmt.Println(GetMsgpackValueLength(b))
+
+	// Output: TODO
+}
+
+func Benchmark(b *testing.B) {
+	var buf []byte
+
+	b.Run("Write", func(b *testing.B) {
+		for range b.N {
+			buf = buf[:0]
+
+			buf = AppendArray(buf, 3)
+			buf = AppendString(buf, "foo.bar")
+			buf = AppendTimestamp(buf, time.Now())
+			buf = AppendMap(buf, 3)
+
+			buf = AppendString(buf, "a")
+			buf = AppendBool(buf, true)
+
+			buf = AppendString(buf, "b")
+			buf = AppendInt(buf, 123)
+
+			buf = AppendString(buf, "c")
+			buf = AppendFloat64(buf, 456.789)
+		}
+	})
+
+	b.Run("ReadLength", func(b *testing.B) {
+		for range b.N {
+			_, err := GetMsgpackValueLength(buf)
+
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
 
 func TestAppendArray(t *testing.T) {
 	tests := []struct {

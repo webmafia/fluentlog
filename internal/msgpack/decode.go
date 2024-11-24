@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"time"
+
+	"github.com/webmafia/fluentlog/internal"
 )
 
 var (
@@ -82,8 +84,32 @@ func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error
 // ReadString reads a string from src starting at offset.
 // It returns the string and the new offset after reading.
 func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
+	buf, newOffset, err := readStringBuf(src, offset)
+
+	if err != nil {
+		return
+	}
+
+	return internal.B2S(buf), newOffset, err
+}
+
+// ReadString reads a string from src starting at offset.
+// It returns the string and the new offset after reading.
+func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error) {
+	buf, newOffset, err := readStringBuf(src, offset)
+
+	if err != nil {
+		return
+	}
+
+	return string(buf), newOffset, err
+}
+
+// ReadString reads a string from src starting at offset.
+// It returns the string and the new offset after reading.
+func readStringBuf(src []byte, offset int) (s []byte, newOffset int, err error) {
 	if offset >= len(src) {
-		return "", offset, ErrShortBuffer
+		return nil, offset, ErrShortBuffer
 	}
 	b := src[offset]
 	offset++
@@ -95,31 +121,31 @@ func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
 	case b == 0xd9:
 		// str8
 		if offset >= len(src) {
-			return "", offset, ErrShortBuffer
+			return nil, offset, ErrShortBuffer
 		}
 		length = int(src[offset])
 		offset++
 	case b == 0xda:
 		// str16
 		if offset+1 >= len(src) {
-			return "", offset, ErrShortBuffer
+			return nil, offset, ErrShortBuffer
 		}
 		length = int(src[offset])<<8 | int(src[offset+1])
 		offset += 2
 	case b == 0xdb:
 		// str32
 		if offset+3 >= len(src) {
-			return "", offset, ErrShortBuffer
+			return nil, offset, ErrShortBuffer
 		}
 		length = int(src[offset])<<24 | int(src[offset+1])<<16 | int(src[offset+2])<<8 | int(src[offset+3])
 		offset += 4
 	default:
-		return "", offset, fmt.Errorf("invalid string header byte: 0x%02x", b)
+		return nil, offset, fmt.Errorf("invalid string header byte: 0x%02x", b)
 	}
 	if offset+length > len(src) {
-		return "", offset, ErrShortBuffer
+		return nil, offset, ErrShortBuffer
 	}
-	s = string(src[offset : offset+length])
+	s = src[offset : offset+length]
 	offset += length
 	return s, offset, nil
 }
