@@ -2,13 +2,16 @@ package fluentlog
 
 import (
 	"fmt"
-	"testing"
+	"log"
 )
 
 func Example() {
-	msg := NewMessage()
+	msg := NewMessage("foo.bar")
 	msg.AddField("foo", "bar")
+	msg.AddField("baz", 123)
 	msg.AddField("baz", "test")
+
+	log.Printf("%x", msg.buf)
 
 	for k, v := range msg.Fields() {
 		fmt.Println(k, v)
@@ -22,13 +25,13 @@ func Example() {
 	// Output: TODO
 }
 
-func BenchmarkXxx(b *testing.B) {
-	msg := NewMessage()
+// func BenchmarkXxx(b *testing.B) {
+// 	msg := NewMessage()
 
-	b.ResetTimer()
+// 	b.ResetTimer()
 
-	for range b.N {
-		msg.write(0x92)
-		msg.Reset()
-	}
-}
+// 	for range b.N {
+// 		msg.write(0x92)
+// 		msg.Reset()
+// 	}
+// }
