@@ -193,8 +193,5 @@ func AppendFloat64(dst []byte, f float64) []byte {
 }
 
 func AppendTimestamp(dst []byte, t time.Time) []byte {
-	sec := uint32(t.UTC().Unix())
-	dst = append(dst, 0xd6, 0xff)
-	dst = append(dst, byte(sec>>24), byte(sec>>16), byte(sec>>8), byte(sec))
-	return dst
+	return AppendInt(dst, t.UTC().Unix())
 }

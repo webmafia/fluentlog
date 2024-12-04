@@ -11,10 +11,10 @@ type Writer struct {
 }
 
 // NewWriter creates a new Writer with the provided io.Writer and initial buffer size.
-func NewWriter(w io.Writer, bufferSize int) *Writer {
-	return &Writer{
+func NewWriter(w io.Writer, buffer []byte) Writer {
+	return Writer{
 		w:   w,
-		buf: make([]byte, 0, bufferSize),
+		buf: buffer[:0],
 	}
 }
 

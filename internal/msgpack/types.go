@@ -38,3 +38,53 @@ const (
 	Map32     = 0xdf
 	NegFixint = 0xe0
 )
+
+// Type represents the MessagePack type of the next value.
+type Type uint8
+
+const (
+	TypeUnknown Type = iota
+	TypeNil
+	TypeBool
+	TypeInt
+	TypeUint
+	TypeFloat32
+	TypeFloat64
+	TypeString
+	TypeBinary
+	TypeArray
+	TypeMap
+	TypeExt
+	TypeTimestamp
+)
+
+func (t Type) String() string {
+	switch t {
+	case TypeNil:
+		return "nil"
+	case TypeBool:
+		return "bool"
+	case TypeInt:
+		return "int"
+	case TypeUint:
+		return "uint"
+	case TypeFloat32:
+		return "float32"
+	case TypeFloat64:
+		return "float64"
+	case TypeString:
+		return "string"
+	case TypeBinary:
+		return "binary"
+	case TypeArray:
+		return "array"
+	case TypeMap:
+		return "map"
+	case TypeExt:
+		return "exp"
+	case TypeTimestamp:
+		return "timestamp"
+	}
+
+	return "unknown"
+}

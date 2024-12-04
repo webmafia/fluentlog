@@ -1,0 +1,7 @@
+services:
+  fluent-bit:
+    image: fluent/fluent-bit
+    ports:
+      - 127.0.0.1:24224:24224
+    volumes:
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf

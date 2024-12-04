@@ -4,12 +4,15 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"time"
 
 	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
+
+var _ io.WriterTo = Message{}
 
 type Message struct {
 	buf []byte
@@ -208,7 +211,7 @@ func (msg *Message) findMapHeader() (mapHeaderPos int, numFields int, err error)
 	}
 
 	// Skip the timestamp
-	_, offset, err = msgpack.ReadTimestamp(msg.buf, offset)
+	_, offset, err = msgpack.ReadInt(msg.buf, offset)
 	if err != nil {
 		return
 	}
@@ -223,4 +226,9 @@ func (msg *Message) findMapHeader() (mapHeaderPos int, numFields int, err error)
 	}
 
 	return mapHeaderPos, numFields, nil
+}
+
+func (msg Message) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(msg.buf)
+	return int64(n), err
 }
