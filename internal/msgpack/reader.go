@@ -1,6 +1,8 @@
 package msgpack
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -37,6 +39,19 @@ func (r *Reader) Reset(reader io.Reader) {
 
 func (r *Reader) Rewind() {
 	r.pos = 0
+}
+
+func (r *Reader) Pos() int {
+	return r.pos
+}
+
+func (r *Reader) ResetToPos(pos int) {
+	r.pos = min(pos, r.size)
+	r.size = r.pos
+}
+
+func (r *Reader) ConsumedBuffer() []byte {
+	return r.buf[:r.pos]
 }
 
 // PeekType peeks at the next MessagePack type without consuming any data.
@@ -183,6 +198,26 @@ func (r *Reader) Release() {
 	copy(r.buf, r.buf[r.pos:r.size])
 	r.size -= r.pos
 	r.pos = 0
+}
+
+func (r *Reader) ReleaseTo(pos int) error {
+	if pos > r.size || pos < 0 {
+		return fmt.Errorf("ReleaseTo: invalid position %d (must be between 0 and %d)", pos, r.size)
+	}
+
+	// Calculate the size of unconsumed data
+	unconsumed := r.size - r.pos
+
+	// Move unconsumed data to position `pos`
+	copy(r.buf[pos:], r.buf[r.pos:r.size])
+
+	// Update buffer size to include all data up to `pos` and the unconsumed part
+	r.size = pos + unconsumed
+
+	// Reset the read position to `pos`
+	r.pos = pos
+
+	return nil
 }
 
 // ReadArrayHeader reads an array header from the buffered data.
@@ -520,66 +555,53 @@ func (r *Reader) ReadFloat64() (float64, error) {
 }
 
 // ReadTimestamp reads a timestamp value from the buffered data.
-func (r *Reader) ReadTimestamp() (time.Time, error) {
-	if err := r.fill(1); err != nil {
-		return time.Time{}, err
+// It supports both EventTime (ext type 0) and integer timestamps.
+func (r *Reader) ReadTimestamp() (t time.Time, err error) {
+	if err = r.fill(1); err != nil {
+		return
 	}
+
 	b := r.buf[r.pos]
-	var extType int8
-	var data []byte
-	var headerSize int
-	var dataSize int
+
+	var s, ns int64
 
 	switch b {
-	case 0xd6: // fixext4
-		headerSize = 2
-		dataSize = 4
-		if err := r.fill(headerSize + dataSize); err != nil {
-			return time.Time{}, err
-		}
-		extType = int8(r.buf[r.pos+1])
-		data = r.buf[r.pos+2 : r.pos+2+4]
+
 	case 0xd7: // fixext8
-		headerSize = 2
-		dataSize = 8
-		if err := r.fill(headerSize + dataSize); err != nil {
-			return time.Time{}, err
+		if err = r.fill(10); err != nil {
+			return
 		}
-		extType = int8(r.buf[r.pos+1])
-		data = r.buf[r.pos+2 : r.pos+2+8]
+
+		if r.buf[r.pos+1] != 0x00 {
+			err = errors.New("invalid timestamp type")
+			return
+		}
+
+		s = int64(int32(binary.BigEndian.Uint32(r.buf[r.pos+2 : r.pos+6])))
+		ns = int64(int32(binary.BigEndian.Uint32(r.buf[r.pos+6 : r.pos+10])))
+		r.consume(10)
+
 	case 0xc7: // ext8
-		headerSize = 3
-		if err := r.fill(headerSize); err != nil {
-			return time.Time{}, err
+		if err = r.fill(11); err != nil {
+			return
 		}
-		dataSize = int(r.buf[r.pos+1])
-		if err := r.fill(headerSize + dataSize); err != nil {
-			return time.Time{}, err
+
+		if r.buf[r.pos+1] != 0x08 || r.buf[r.pos+2] != 0x00 {
+			err = errors.New("invalid timestamp type")
+			return
 		}
-		extType = int8(r.buf[r.pos+2])
-		data = r.buf[r.pos+3 : r.pos+3+dataSize]
+
+		s = int64(int32(binary.BigEndian.Uint32(r.buf[r.pos+3 : r.pos+7])))
+		ns = int64(int32(binary.BigEndian.Uint32(r.buf[r.pos+7 : r.pos+11])))
+		r.consume(11)
+
 	default:
-		return time.Time{}, fmt.Errorf("invalid ext header byte: 0x%02x", b)
+		if s, err = r.ReadInt(); err != nil {
+			return
+		}
 	}
 
-	if extType != -1 && extType != 0x00 {
-		return time.Time{}, fmt.Errorf("unexpected ext type: %d", extType)
-	}
-
-	var t time.Time
-	if dataSize == 4 {
-		sec := int64(uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3]))
-		t = time.Unix(sec, 0).UTC()
-	} else if dataSize == 8 {
-		sec := int64(uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3]))
-		nsec := int64(uint32(data[4])<<24 | uint32(data[5])<<16 | uint32(data[6])<<8 | uint32(data[7]))
-		t = time.Unix(sec, nsec).UTC()
-	} else {
-		return time.Time{}, fmt.Errorf("unsupported timestamp data size: %d", dataSize)
-	}
-
-	r.consume(headerSize + dataSize)
-	return t, nil
+	return time.Unix(s, ns), nil
 }
 
 // ReadExt reads an extension object from the buffered data.
@@ -857,4 +879,47 @@ func (r *Reader) skipNMapItems(n int) error {
 		}
 	}
 	return nil
+}
+
+func (r *Reader) SkipTimestamp() error {
+	if err := r.fill(1); err != nil {
+		return err
+	}
+
+	b := r.buf[r.pos]
+	switch b {
+	case 0xd7: // fixext8 timestamp
+		if err := r.fill(10); err != nil {
+			return err
+		}
+		if r.buf[r.pos+1] != 0x00 {
+			return fmt.Errorf("SkipTimestamp: invalid timestamp type")
+		}
+		r.consume(10)
+		return nil
+
+	case 0xc7: // ext8 timestamp
+		if err := r.fill(11); err != nil {
+			return err
+		}
+		if r.buf[r.pos+1] != 0x08 || r.buf[r.pos+2] != 0x00 {
+			return fmt.Errorf("SkipTimestamp: invalid timestamp type")
+		}
+		r.consume(11)
+		return nil
+
+	default:
+		return fmt.Errorf("SkipTimestamp: expected timestamp but got type 0x%02x", b)
+	}
+}
+
+func (r *Reader) SkipMap() error {
+	// Read the map header to determine the number of key-value pairs
+	mapLen, err := r.ReadMapHeader()
+	if err != nil {
+		return fmt.Errorf("SkipMap: failed to read map header: %v", err)
+	}
+
+	// Skip all keys and values
+	return r.skipNMapItems(mapLen)
 }

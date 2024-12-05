@@ -78,6 +78,11 @@ func (w *Writer) WriteTimestamp(t time.Time) {
 	w.buf = AppendTimestamp(w.buf, t)
 }
 
+// WriteTimestamp appends a timestamp with millisecond precision to the buffer.
+func (w *Writer) WriteTimestampExt(t time.Time) {
+	w.buf = AppendTimestampExt(w.buf, t)
+}
+
 // WriteCustom appends custom data to the buffer using a provided function.
 func (w *Writer) WriteCustom(fn func([]byte) []byte) {
 	w.buf = fn(w.buf)

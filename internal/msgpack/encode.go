@@ -195,3 +195,28 @@ func AppendFloat64(dst []byte, f float64) []byte {
 func AppendTimestamp(dst []byte, t time.Time) []byte {
 	return AppendInt(dst, t.UTC().Unix())
 }
+
+func AppendTimestampExt(dst []byte, t time.Time) []byte {
+	// Append the fixext8 header and type
+	dst = append(dst, 0xd7, 0x00)
+
+	// Append the seconds as a 32-bit big-endian integer
+	seconds := uint32(t.Unix())
+	dst = append(dst,
+		byte(seconds>>24),
+		byte(seconds>>16),
+		byte(seconds>>8),
+		byte(seconds),
+	)
+
+	// Append the nanoseconds as a 32-bit big-endian integer
+	nanoseconds := uint32(t.Nanosecond())
+	dst = append(dst,
+		byte(nanoseconds>>24),
+		byte(nanoseconds>>16),
+		byte(nanoseconds>>8),
+		byte(nanoseconds),
+	)
+
+	return dst
+}
