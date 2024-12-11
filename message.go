@@ -18,6 +18,12 @@ type Message struct {
 	buf []byte
 }
 
+func MsgFromBuf(buf []byte) Message {
+	return Message{
+		buf: buf,
+	}
+}
+
 func NewMessage(tag string, ts time.Time) Message {
 	msg := Message{
 		buf: make([]byte, 0, 1024),

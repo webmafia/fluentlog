@@ -221,7 +221,8 @@ func (v Value) Map() iter.Seq2[Value, Value] {
 }
 
 func (v Value) Time() (val time.Time) {
-	val, _, _ = msgpack.ReadTimestamp(v, 0)
+	val, _, err := msgpack.ReadTimestamp(v, 0)
+	_ = err
 	return
 }
 

@@ -319,6 +319,7 @@ func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err erro
 	}
 	b := src[offset]
 	offset++
+
 	if b != 0xd6 {
 		return time.Time{}, offset, fmt.Errorf("expected fixext4 (0xd6), got 0x%02x", b)
 	}

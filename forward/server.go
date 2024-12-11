@@ -5,11 +5,13 @@ import (
 	"log"
 	"net"
 
+	"github.com/valyala/bytebufferpool"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
 type Server struct {
-	opt ServerOptions
+	opt     ServerOptions
+	bufPool bytebufferpool.Pool
 }
 
 type ServerOptions struct {
@@ -33,7 +35,10 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, addr string) (err error) {
+func (s *Server) Listen(ctx context.Context, addr string, fn func(*bytebufferpool.ByteBuffer) error) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", addr)
 
@@ -41,7 +46,11 @@ func (s *Server) Listen(ctx context.Context, addr string) (err error) {
 		return
 	}
 
-	defer listener.Close()
+	go func() {
+		<-ctx.Done()
+		listener.Close()
+		log.Println("Closed listener")
+	}()
 
 	log.Println("Listening on", addr)
 
@@ -60,7 +69,7 @@ func (s *Server) Listen(ctx context.Context, addr string) (err error) {
 		}
 
 		go func() {
-			if err := sc.Handle(); err != nil {
+			if err := sc.Handle(fn); err != nil {
 				log.Println(err)
 			}
 		}()

@@ -2,6 +2,8 @@ package forward
 
 import (
 	"crypto/rand"
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -263,4 +265,14 @@ func (c *Client) readPong(nonce []byte, salt [16]byte) (err error) {
 
 	c.serverHostname = strings.Clone(serverHostname)
 	return
+}
+
+func sharedKeyDigest(salt []byte, fqdn string, nonce []byte, sharedKey []byte) string {
+	h := sha512.New()
+	h.Write(salt)
+	h.Write(internal.S2B(fqdn))
+	h.Write(nonce)
+	h.Write(sharedKey)
+
+	return internal.B2S(hex.AppendEncode(nil, h.Sum(nil)))
 }

@@ -15,10 +15,6 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	if err := startServer(ctx); err != nil {
-		log.Println(err)
-	}
-
 	if err := startClient(ctx); err != nil {
 		log.Println(err)
 	}
@@ -33,6 +29,16 @@ func startClient(ctx context.Context) (err error) {
 		return
 	}
 
+	// w := cli.Writer()
+
+	// w.WriteArrayHeader(3)
+	// w.WriteString("foo.bar")
+	// w.WriteTimestamp(time.Now())
+	// w.WriteMapHeader(1)
+	// w.WriteString("hello")
+	// w.WriteString("world")
+	// w.Flush()
+
 	msg := fluentlog.NewMessage("foo.bar", time.Now())
 	msg.AddField("foo", 123)
 	msg.AddField("bar", "baz")
@@ -43,16 +49,6 @@ func startClient(ctx context.Context) (err error) {
 
 	log.Println("sent message")
 	time.Sleep(time.Second)
-
-	return
-}
-
-func startServer(ctx context.Context) (err error) {
-	serv := forward.NewServer(forward.ServerOptions{
-		SharedKey: forward.SharedKey([]byte("secret")),
-	})
-
-	go serv.Listen(ctx, "localhost:24224")
 
 	return
 }

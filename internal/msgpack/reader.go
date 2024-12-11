@@ -54,6 +54,11 @@ func (r *Reader) ConsumedBuffer() []byte {
 	return r.buf[:r.pos]
 }
 
+// Change reader without touching current buffer
+func (r *Reader) ChangeReader(reader io.Reader) {
+	r.r = reader
+}
+
 // PeekType peeks at the next MessagePack type without consuming any data.
 func (r *Reader) PeekType() (Type, error) {
 	if err := r.fill(1); err != nil {
@@ -525,6 +530,44 @@ func (r *Reader) ReadBinary() ([]byte, error) {
 	return data, nil
 }
 
+func (r *Reader) SkipBinaryHeader() (int, error) {
+	if err := r.fill(1); err != nil {
+		return 0, err
+	}
+
+	b := r.buf[r.pos]
+	var length int
+	var headerSize int
+
+	switch b {
+	case 0xc4: // bin8
+		headerSize = 2
+		if err := r.fill(headerSize); err != nil {
+			return 0, err
+		}
+		length = int(r.buf[r.pos+1])
+	case 0xc5: // bin16
+		headerSize = 3
+		if err := r.fill(headerSize); err != nil {
+			return 0, err
+		}
+		length = int(r.buf[r.pos+1])<<8 | int(r.buf[r.pos+2])
+	case 0xc6: // bin32
+		headerSize = 5
+		if err := r.fill(headerSize); err != nil {
+			return 0, err
+		}
+		length = int(r.buf[r.pos+1])<<24 | int(r.buf[r.pos+2])<<16 | int(r.buf[r.pos+3])<<8 | int(r.buf[r.pos+4])
+	default:
+		return 0, fmt.Errorf("SkipBinaryHeader: expected binary header but got type 0x%02x", b)
+	}
+
+	// Consume only the header, not the binary data
+	r.consume(headerSize)
+
+	return length, nil
+}
+
 // ReadFloat32 reads a 32-bit floating point number from the buffered data.
 func (r *Reader) ReadFloat32() (float32, error) {
 	if err := r.fill(5); err != nil {
@@ -682,6 +725,7 @@ func (r *Reader) ReadRaw() ([]byte, error) {
 
 	// Return the bytes from startPos to r.pos
 	rawBytes := r.buf[startPos:r.pos]
+	r.consume(len(rawBytes))
 
 	return rawBytes, nil
 }
@@ -881,38 +925,6 @@ func (r *Reader) skipNMapItems(n int) error {
 	return nil
 }
 
-func (r *Reader) SkipTimestamp() error {
-	if err := r.fill(1); err != nil {
-		return err
-	}
-
-	b := r.buf[r.pos]
-	switch b {
-	case 0xd7: // fixext8 timestamp
-		if err := r.fill(10); err != nil {
-			return err
-		}
-		if r.buf[r.pos+1] != 0x00 {
-			return fmt.Errorf("SkipTimestamp: invalid timestamp type")
-		}
-		r.consume(10)
-		return nil
-
-	case 0xc7: // ext8 timestamp
-		if err := r.fill(11); err != nil {
-			return err
-		}
-		if r.buf[r.pos+1] != 0x08 || r.buf[r.pos+2] != 0x00 {
-			return fmt.Errorf("SkipTimestamp: invalid timestamp type")
-		}
-		r.consume(11)
-		return nil
-
-	default:
-		return fmt.Errorf("SkipTimestamp: expected timestamp but got type 0x%02x", b)
-	}
-}
-
 func (r *Reader) SkipMap() error {
 	// Read the map header to determine the number of key-value pairs
 	mapLen, err := r.ReadMapHeader()
@@ -922,4 +934,33 @@ func (r *Reader) SkipMap() error {
 
 	// Skip all keys and values
 	return r.skipNMapItems(mapLen)
+}
+
+func (r *Reader) PeekBytes(n int) ([]byte, error) {
+	if err := r.fill(n); err != nil {
+		return nil, err
+	}
+
+	return r.buf[r.pos : r.pos+n], nil
+}
+
+var _ io.Reader = (*Reader)(nil)
+
+func (r *Reader) Read(p []byte) (int, error) {
+	// If there's no unconsumed data in the buffer, try to fill it.
+	if r.pos >= r.size {
+		if err := r.fill(1); err != nil {
+			// Return EOF if no data remains and it's not an unexpected error
+			if err == io.EOF {
+				return 0, io.EOF
+			}
+			return 0, err
+		}
+	}
+
+	// Determine how much data to copy
+	n := copy(p, r.buf[r.pos:r.size])
+	r.pos += n // Update the position in the buffer
+
+	return n, nil
 }

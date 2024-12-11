@@ -2,13 +2,10 @@ package forward
 
 import (
 	"context"
-	"crypto/sha512"
-	"encoding/hex"
 	"log"
 	"net"
 
 	"github.com/webmafia/fluentlog"
-	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
@@ -74,22 +71,6 @@ func (c *Client) Send(msg fluentlog.Message) (err error) {
 	return
 }
 
-func sharedKeyDigest(salt []byte, fqdn string, nonce []byte, sharedKey []byte) string {
-	h := sha512.New()
-	h.Write(salt)
-	h.Write(internal.S2B(fqdn))
-	h.Write(nonce)
-	h.Write(sharedKey)
-
-	return internal.B2S(hex.AppendEncode(nil, h.Sum(nil)))
-}
-
-func authDigest(salt []byte, fqdn string, nonce []byte, sharedKey []byte) string {
-	h := sha512.New()
-	h.Write(salt)
-	h.Write(internal.S2B(fqdn))
-	h.Write(nonce)
-	h.Write(sharedKey)
-
-	return internal.B2S(hex.AppendEncode(nil, h.Sum(nil)))
+func (c *Client) Writer() msgpack.Writer {
+	return c.w
 }
