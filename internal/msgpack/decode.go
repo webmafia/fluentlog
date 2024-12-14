@@ -1,6 +1,7 @@
 package msgpack
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -311,33 +312,59 @@ func ReadBool(src []byte, offset int) (value bool, newOffset int, err error) {
 	return value, offset, nil
 }
 
-// ReadTimestamp reads a timestamp value from src starting at offset.
-// It returns the time.Time value and the new offset after reading.
+// ReadTimestamp reads a timestamp value from the given byte slice starting at the specified offset.
+// It supports both EventTime (ext type 0) and integer timestamps.
 func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err error) {
 	if offset >= len(src) {
-		return time.Time{}, offset, ErrShortBuffer
+		err = io.ErrUnexpectedEOF
+		return
 	}
-	b := src[offset]
-	offset++
 
-	if b != 0xd6 {
-		return time.Time{}, offset, fmt.Errorf("expected fixext4 (0xd6), got 0x%02x", b)
+	b := src[offset]
+	var s, ns int64
+
+	switch b {
+	case 0xd7: // fixext8
+		if offset+10 > len(src) {
+			err = io.ErrUnexpectedEOF
+			return
+		}
+
+		if src[offset+1] != 0x00 {
+			err = errors.New("invalid timestamp type")
+			return
+		}
+
+		s = int64(int32(binary.BigEndian.Uint32(src[offset+2 : offset+6])))
+		ns = int64(int32(binary.BigEndian.Uint32(src[offset+6 : offset+10])))
+		newOffset = offset + 10
+
+	case 0xc7: // ext8
+		if offset+11 > len(src) {
+			err = io.ErrUnexpectedEOF
+			return
+		}
+
+		if src[offset+1] != 0x08 || src[offset+2] != 0x00 {
+			err = errors.New("invalid timestamp type")
+			return
+		}
+
+		s = int64(int32(binary.BigEndian.Uint32(src[offset+3 : offset+7])))
+		ns = int64(int32(binary.BigEndian.Uint32(src[offset+7 : offset+11])))
+		newOffset = offset + 11
+
+	default:
+		var intVal int64
+		intVal, newOffset, err = ReadInt(src, offset)
+		if err != nil {
+			return
+		}
+		s = intVal
 	}
-	if offset >= len(src) {
-		return time.Time{}, offset, ErrShortBuffer
-	}
-	typ := src[offset]
-	offset++
-	if typ != 0xff {
-		return time.Time{}, offset, fmt.Errorf("expected timestamp type (-1), got 0x%02x", typ)
-	}
-	if offset+3 >= len(src) {
-		return time.Time{}, offset, ErrShortBuffer
-	}
-	sec := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
-	offset += 4
-	t = time.Unix(int64(sec), 0).UTC()
-	return t, offset, nil
+
+	t = time.Unix(s, ns)
+	return
 }
 
 // ReadExt reads an extension object from src starting at offset.
