@@ -196,7 +196,7 @@ func AppendTimestamp(dst []byte, t time.Time) []byte {
 	return AppendInt(dst, t.UTC().Unix())
 }
 
-func AppendTimestampExt(dst []byte, t time.Time) []byte {
+func AppendExtendedTimestamp(dst []byte, t time.Time) []byte {
 	// Append the fixext8 header and type
 	dst = append(dst, 0xd7, 0x00)
 
