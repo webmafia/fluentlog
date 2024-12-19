@@ -6,232 +6,126 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"time"
 
-	"github.com/webmafia/fluentlog/internal"
+	"github.com/webmafia/fast"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 var (
 	// ErrShortBuffer is returned when the byte slice is too short to read the expected data.
-	ErrShortBuffer = io.ErrUnexpectedEOF
+	ErrShortBuffer = io.ErrShortBuffer
 	// ErrInvalidFormat is returned when the data does not conform to the expected MessagePack format.
 	ErrInvalidFormat = errors.New("invalid MessagePack format")
 )
 
+func expectType(c byte, expected types.Type) (err error) {
+	if types.Get(c) != expected {
+		err = fmt.Errorf("invalid %s header byte: 0x%02x", expected, c)
+	}
+
+	return
+}
+
 // ReadArrayHeader reads an array header from src starting at offset.
 // It returns the length of the array and the new offset after reading.
 func ReadArrayHeader(src []byte, offset int) (length int, newOffset int, err error) {
-	if offset >= len(src) {
-		return 0, offset, ErrShortBuffer
+	if err = expectType(src[offset], types.Array); err != nil {
+		return
 	}
-	b := src[offset]
-	offset++
-	switch {
-	case b >= 0x90 && b <= 0x9f:
-		// fixarray
-		length = int(b & 0x0f)
-	case b == 0xdc:
-		// array 16
-		if offset+1 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		length = int(src[offset])<<8 | int(src[offset+1])
-		offset += 2
-	case b == 0xdd:
-		// array 32
-		if offset+3 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		length = int(src[offset])<<24 | int(src[offset+1])<<16 | int(src[offset+2])<<8 | int(src[offset+3])
-		offset += 4
-	default:
-		return 0, offset, fmt.Errorf("invalid array header byte: 0x%02x", b)
-	}
-	return length, offset, nil
+
+	return readLen(src, offset)
 }
 
 // ReadMapHeader reads a map header from src starting at offset.
 // It returns the number of key-value pairs and the new offset after reading.
 func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error) {
+	if err = expectType(src[offset], types.Map); err != nil {
+		return
+	}
+
+	return readLen(src, offset)
+}
+
+func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
+	if err = expectType(src[offset], types.Str); err != nil {
+		return
+	}
+
+	length, offset, err := readLen(src, offset)
+
+	if err != nil {
+		return
+	}
+
+	// Extract the string and return
+	s = fast.BytesToString(src[offset : offset+int(length)])
+	newOffset = offset + int(length)
+	return
+}
+
+func readLen(src []byte, offset int) (length int, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
 	}
-	b := src[offset]
+
+	// Get the length of the string or the length of the "length field"
+	length, isValLen := types.GetLength(src[offset])
+
+	// Advance to the next byte after the type
 	offset++
-	switch {
-	case b >= 0x80 && b <= 0x8f:
-		// fixmap
-		length = int(b & 0x0f)
-	case b == 0xde:
-		// map 16
-		if offset+1 >= len(src) {
-			return 0, offset, ErrShortBuffer
+
+	// If the length is encoded in additional bytes, decode it
+	if !isValLen {
+		// Ensure enough bytes are available for the length field
+		if len(src) < offset+int(length) {
+			err = ErrShortBuffer
+			return
 		}
-		length = int(src[offset])<<8 | int(src[offset+1])
-		offset += 2
-	case b == 0xdf:
-		// map 32
-		if offset+3 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		length = int(src[offset])<<24 | int(src[offset+1])<<16 | int(src[offset+2])<<8 | int(src[offset+3])
-		offset += 4
-	default:
-		return 0, offset, fmt.Errorf("invalid map header byte: 0x%02x", b)
+
+		// Decode the length from the next `length` bytes
+		decodedLength := types.GetInt(src[offset : offset+int(length)])
+		offset += int(length) // Advance past the length field
+		length = decodedLength
 	}
+
+	// Ensure enough bytes are available for the string data
+	if len(src) < offset+int(length) {
+		err = ErrShortBuffer
+		return
+	}
+
 	return length, offset, nil
 }
 
 // ReadString reads a string from src starting at offset.
 // It returns the string and the new offset after reading.
-func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
-	buf, newOffset, err := readStringBuf(src, offset)
-
-	if err != nil {
-		return
-	}
-
-	return internal.B2S(buf), newOffset, err
-}
-
-// ReadString reads a string from src starting at offset.
-// It returns the string and the new offset after reading.
 func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error) {
-	buf, newOffset, err := readStringBuf(src, offset)
+	s, newOffset, err = ReadString(src, offset)
 
-	if err != nil {
-		return
+	if err == nil {
+		s = strings.Clone(s)
 	}
 
-	return string(buf), newOffset, err
-}
-
-// ReadString reads a string from src starting at offset.
-// It returns the string and the new offset after reading.
-func readStringBuf(src []byte, offset int) (s []byte, newOffset int, err error) {
-	if offset >= len(src) {
-		return nil, offset, ErrShortBuffer
-	}
-	b := src[offset]
-	offset++
-	var length int
-	switch {
-	case b >= 0xa0 && b <= 0xbf:
-		// fixstr
-		length = int(b & 0x1f)
-	case b == 0xd9:
-		// str8
-		if offset >= len(src) {
-			return nil, offset, ErrShortBuffer
-		}
-		length = int(src[offset])
-		offset++
-	case b == 0xda:
-		// str16
-		if offset+1 >= len(src) {
-			return nil, offset, ErrShortBuffer
-		}
-		length = int(src[offset])<<8 | int(src[offset+1])
-		offset += 2
-	case b == 0xdb:
-		// str32
-		if offset+3 >= len(src) {
-			return nil, offset, ErrShortBuffer
-		}
-		length = int(src[offset])<<24 | int(src[offset+1])<<16 | int(src[offset+2])<<8 | int(src[offset+3])
-		offset += 4
-	default:
-		return nil, offset, fmt.Errorf("invalid string header byte: 0x%02x", b)
-	}
-	if offset+length > len(src) {
-		return nil, offset, ErrShortBuffer
-	}
-	s = src[offset : offset+length]
-	offset += length
-	return s, offset, nil
+	return
 }
 
 // ReadInt reads an integer value from src starting at offset.
 // It returns the integer value and the new offset after reading.
 func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
-	if offset >= len(src) {
-		return 0, offset, ErrShortBuffer
+	if typ := types.Get(src[offset]); typ != types.Int && typ != types.Uint {
+		err = fmt.Errorf("invalid integer header byte: 0x%02x", src[offset])
+		return
 	}
-	b := src[offset]
-	offset++
-	switch {
-	case b <= 0x7f:
-		// positive fixint
-		value = int64(b)
-	case b >= 0xe0:
-		// negative fixint
-		value = int64(int8(b))
-	case b == 0xd0:
-		// int8
-		if offset >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		value = int64(int8(src[offset]))
-		offset++
-	case b == 0xd1:
-		// int16
-		if offset+1 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		u := uint16(src[offset])<<8 | uint16(src[offset+1])
-		value = int64(int16(u))
-		offset += 2
-	case b == 0xd2:
-		// int32
-		if offset+3 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		u := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
-		value = int64(int32(u))
-		offset += 4
-	case b == 0xd3:
-		// int64
-		if offset+7 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		u := uint64(src[offset])<<56 | uint64(src[offset+1])<<48 | uint64(src[offset+2])<<40 | uint64(src[offset+3])<<32 |
-			uint64(src[offset+4])<<24 | uint64(src[offset+5])<<16 | uint64(src[offset+6])<<8 | uint64(src[offset+7])
-		value = int64(u)
-		offset += 8
-	case b == 0xcc:
-		// uint8
-		if offset >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		value = int64(src[offset])
-		offset++
-	case b == 0xcd:
-		// uint16
-		if offset+1 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		value = int64(uint16(src[offset])<<8 | uint16(src[offset+1]))
-		offset += 2
-	case b == 0xce:
-		// uint32
-		if offset+3 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		u := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
-		value = int64(u)
-		offset += 4
-	case b == 0xcf:
-		// uint64
-		if offset+7 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		u := uint64(src[offset])<<56 | uint64(src[offset+1])<<48 | uint64(src[offset+2])<<40 | uint64(src[offset+3])<<32 |
-			uint64(src[offset+4])<<24 | uint64(src[offset+5])<<16 | uint64(src[offset+6])<<8 | uint64(src[offset+7])
-		value = int64(u)
-		offset += 8
-	default:
-		return 0, offset, fmt.Errorf("invalid int header byte: 0x%02x", b)
+
+	length, offset, err := readLen(src, offset)
+
+	if err == nil {
+		value = int64(types.GetInt(src[offset : offset+length]))
+		offset += length
 	}
+
 	return value, offset, nil
 }
 
@@ -508,4 +402,27 @@ func ReadFloat64(src []byte, offset int) (value float64, newOffset int, err erro
 	value = math.Float64frombits(bits)
 	offset += 8
 	return value, offset, nil
+}
+
+func Skip(src []byte, offset int) (newOffset int, err error) {
+	typ := types.Get(src[offset])
+	length, offset, err := readLen(src, offset)
+
+	if err != nil {
+		return
+	}
+
+	if typ == types.Map {
+		length *= 2
+	} else if typ != types.Array {
+		return offset + length, nil
+	}
+
+	for range length {
+		if offset, err = Skip(src, offset); err != nil {
+			return
+		}
+	}
+
+	return offset, nil
 }

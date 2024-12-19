@@ -1,0 +1,228 @@
+package msgpack
+
+import (
+	"encoding/hex"
+	"fmt"
+	"iter"
+	"strconv"
+	"time"
+
+	"github.com/webmafia/fast"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
+)
+
+var (
+	_ fmt.Stringer        = (Value)(nil)
+	_ fast.TextAppender   = (Value)(nil)
+	_ fast.BinaryAppender = (Value)(nil)
+	_ fast.JsonAppender   = (Value)(nil)
+)
+
+type Value []byte
+
+func (v Value) Type() types.Type {
+	if len(v) == 0 {
+		return types.Nil
+	}
+
+	return types.Get(v[0])
+}
+
+func (v Value) Array() iter.Seq[Value] {
+	return func(yield func(Value) bool) {
+		if v.Type() != types.Array {
+			return
+		}
+
+		length, offset, err := readLen(v, 0)
+
+		if err != nil {
+			return
+		}
+
+		for range length {
+			next, err := Skip(v, offset)
+
+			if err != nil {
+				return
+			}
+
+			if !yield(v[offset:next]) {
+				return
+			}
+
+			offset = next
+		}
+
+	}
+}
+
+func (v Value) Map() iter.Seq2[Value, Value] {
+	return func(yield func(key, val Value) bool) {
+		if v.Type() != types.Map {
+			return
+		}
+
+		length, offset, err := readLen(v, 0)
+
+		if err != nil {
+			return
+		}
+
+		for range length {
+			next, err := Skip(v, offset)
+
+			if err != nil {
+				return
+			}
+
+			next2, err := Skip(v, next)
+
+			if err != nil {
+				return
+			}
+
+			if !yield(v[offset:next], v[next:next2]) {
+				return
+			}
+
+			offset = next2
+		}
+
+	}
+}
+
+func (v Value) Len() (l int) {
+	l, _, _ = readLen(v, 0)
+	return
+}
+
+func (v Value) Bool() (val bool) {
+	val, _, _ = ReadBool(v, 0)
+	return
+}
+
+func (v Value) Int() (val int64) {
+	val, _, _ = ReadInt(v, 0)
+	return
+}
+
+func (v Value) Uint() (val uint64) {
+	val, _, _ = ReadUint(v, 0)
+	return
+}
+
+func (v Value) Float() float64 {
+	if v[0]&0xf0 == Float32 {
+		val, _, _ := ReadFloat32(v, 0)
+		return float64(val)
+	}
+
+	val, _, _ := ReadFloat64(v, 0)
+
+	return val
+}
+
+func (v Value) Str() (val string) {
+	val, _, _ = ReadString(v, 0)
+	return
+}
+
+func (v Value) StrCopy() (val string) {
+	val, _, _ = ReadStringCopy(v, 0)
+	return
+}
+
+func (v Value) Bin() (val []byte) {
+	val, _, _ = ReadBinary(v, 0)
+	return
+}
+
+func (v Value) Time() (val time.Time) {
+	val, _, _ = ReadTimestamp(v, 0)
+	return
+}
+
+// Returns an allocated string representation of the value.
+func (v Value) String() string {
+	switch v.Type() {
+
+	case types.Bool:
+		return strconv.FormatBool(v.Bool())
+
+	case types.Int:
+		return strconv.FormatInt(v.Int(), 10)
+
+	case types.Uint:
+		return strconv.FormatUint(v.Uint(), 10)
+
+	case types.Float:
+		return strconv.FormatFloat(v.Float(), 'f', 6, 64)
+
+	case types.Str:
+		return v.StrCopy()
+
+	case types.Bin:
+		return hex.EncodeToString(v.Bin())
+
+	case types.Array:
+		return "Array<" + strconv.Itoa(v.Len()) + ">"
+
+	case types.Map:
+		return "Map<" + strconv.Itoa(v.Len()) + ">"
+
+	case types.Ext:
+		return v.Time().Format(time.DateTime)
+	}
+
+	return ""
+}
+
+// AppendText implements fast.TextAppender.
+func (v Value) AppendText(b []byte) ([]byte, error) {
+	switch v.Type() {
+
+	case types.Bool:
+		return strconv.AppendBool(b, v.Bool()), nil
+
+	case types.Int:
+		return strconv.AppendInt(b, v.Int(), 10), nil
+
+	case types.Uint:
+		return strconv.AppendUint(b, v.Uint(), 10), nil
+
+	case types.Float:
+		return strconv.AppendFloat(b, v.Float(), 'f', 6, 64), nil
+
+	case types.Str:
+		return append(b, v.Str()...), nil
+
+	case types.Bin:
+		return hex.AppendEncode(b, v.Bin()), nil
+
+	case types.Array:
+		b = append(b, "Array<"...)
+		b = strconv.AppendInt(b, int64(v.Len()), 10)
+		return append(b, '>'), nil
+
+	case types.Map:
+		b = append(b, "Map<"...)
+		b = strconv.AppendInt(b, int64(v.Len()), 10)
+		return append(b, '>'), nil
+
+	case types.Ext:
+		return v.Time().AppendFormat(b, time.DateTime), nil
+	}
+
+	return b, ErrInvalidFormat
+}
+
+// AppendBinary implements fast.BinaryAppender.
+func (v Value) AppendBinary(b []byte) ([]byte, error) {
+	return append(b, v...), nil
+}
+
+// AppendJson implements fast.JsonAppender.
+func (v Value) AppendJson(b []byte) ([]byte, error) {
+	panic("not implemented")
+}

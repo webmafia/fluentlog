@@ -194,3 +194,55 @@ func TestReadTimestamp(t *testing.T) {
 		t.Errorf("ReadTimestamp returned newOffset %d; want %d", newOffset, 6)
 	}
 }
+
+func Example_decode() {
+	var buf []byte
+
+	buf = AppendString(buf, "foobar foobar foobar foobar foobar foobar foobar foobar foobar")
+
+	// fmt.Println(types.Get(buf[0]))
+	// fmt.Println(types.GetLength(buf[0]))
+
+	// fmt.Println(ReadString(buf, 0))
+	fmt.Println(ReadString(buf, 0))
+
+	// Output: foobar foobar foobar foobar foobar foobar foobar foobar foobar 64 <nil>
+}
+
+func BenchmarkString(b *testing.B) {
+	var buf []byte
+
+	buf = AppendString(buf, "foobar foobar foobar foobar foobar foobar foobar foobar foobar")
+
+	b.Run("ReadString", func(b *testing.B) {
+		for range b.N {
+			_, _, _ = ReadString(buf, 0)
+		}
+	})
+}
+
+func ExampleSkip() {
+	var buf []byte
+
+	buf = AppendArray(buf, 3)
+	buf = AppendString(buf, "foo")
+	buf = AppendString(buf, "bar")
+	buf = AppendString(buf, "baz")
+
+	fmt.Println(len(buf), string(buf))
+
+	var (
+		offset int
+		err    error
+	)
+
+	fmt.Println(offset)
+
+	if offset, err = Skip(buf, 0); err != nil {
+		panic(err)
+	}
+
+	fmt.Println(offset)
+
+	// Output: TODO
+}
