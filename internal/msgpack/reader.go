@@ -9,6 +9,7 @@ import (
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // Reader reads MessagePack-encoded data from an io.Reader.
@@ -635,6 +636,34 @@ func (r *Reader) ReadTimestamp() (t time.Time, err error) {
 	}
 
 	return time.Unix(s, ns), nil
+}
+
+func (r *Reader) Skip() error {
+
+}
+
+func (r *Reader) readLen() (length int, err error) {
+	c, err := r.b.ReadByte()
+
+	if err != nil {
+		return
+	}
+
+	// Get the length of the string or the length of the "length field"
+	length, isValLen := types.GetLength(c)
+
+	// If the length is encoded in additional bytes, decode it
+	if !isValLen {
+		encodedLength, err := r.b.ReadBytes(length)
+
+		if err != nil {
+			return 0, err
+		}
+
+		length = types.GetInt(encodedLength)
+	}
+
+	return
 }
 
 // func (r *Reader) ReadRaw() ([]byte, error) {
