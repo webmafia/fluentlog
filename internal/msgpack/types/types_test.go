@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/binary"
 	"testing"
 )
 
@@ -71,4 +72,31 @@ func TestGetLength(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkInt(b *testing.B) {
+	buf := binary.BigEndian.AppendUint64(nil, 12345678)
+
+	b.Run("GetInt", func(b *testing.B) {
+		for range b.N {
+			_ = GetInt(buf)
+		}
+	})
+
+	b.Run("standard", func(b *testing.B) {
+		for range b.N {
+			_ = binary.BigEndian.Uint64(buf)
+		}
+	})
+
+	b.Run("var", func(b *testing.B) {
+		var fn [1]func([]byte) uint64
+		fn[0] = binary.BigEndian.Uint64
+
+		b.ResetTimer()
+
+		for range b.N {
+			_ = fn[0](buf)
+		}
+	})
 }

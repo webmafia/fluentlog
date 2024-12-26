@@ -177,26 +177,6 @@ func GetLength(b byte) (length int, isValueLength bool) {
 	return int(lengthLookup[b]), isLengthValue[b]
 }
 
-// func GetInt(b []byte) int {
-// 	switch len(b) {
-
-// 	case 1:
-// 		return int(b[0])
-
-// 	case 2:
-// 		return int(b[0])<<8 | int(b[1])
-
-// 	case 4:
-// 		return int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
-
-// 	case 8:
-// 		return int(b[0])<<56 | int(b[1])<<48 | int(b[2])<<40 | int(b[3])<<32 |
-// 			int(b[4])<<24 | int(b[5])<<16 | int(b[6])<<8 | int(b[7])
-// 	}
-
-// 	return 0
-// }
-
 func GetInt(b []byte) int {
 	var result int
 	for i := range b {

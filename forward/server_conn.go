@@ -121,9 +121,7 @@ func (s *ServerConn) forward(tag string, fn func(*bytebufferpool.ByteBuffer) err
 	log.Println("entries:", arrLen)
 
 	for range arrLen {
-		if err = s.r.ReleaseAfter(pos); err != nil {
-			return
-		}
+		s.r.ReleaseAfter(pos)
 
 		if err = s.forwardEntry(tag, fn); err != nil {
 			return

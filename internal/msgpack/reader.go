@@ -57,106 +57,14 @@ func NewReader(b *buffer.Buffer) Reader {
 // }
 
 // PeekType peeks at the next MessagePack type without consuming any data.
-func (r *Reader) PeekType() (t Type, err error) {
+func (r *Reader) PeekType() (t types.Type, err error) {
 	c, err := r.b.PeekByte()
 
 	if err != nil {
 		return
 	}
 
-	switch {
-	// Nil
-	case c == 0xc0:
-		return TypeNil, nil
-	// Bool
-	case c == 0xc2 || c == 0xc3:
-		return TypeBool, nil
-	// Positive FixInt
-	case c <= 0x7f:
-		return TypeInt, nil
-	// Negative FixInt
-	case c >= 0xe0:
-		return TypeInt, nil
-	// Int
-	case c >= 0xd0 && c <= 0xd3:
-		return TypeInt, nil
-	// Uint
-	case c >= 0xcc && c <= 0xcf:
-		return TypeUint, nil
-	// Float32
-	case c == 0xca:
-		return TypeFloat32, nil
-	// Float64
-	case c == 0xcb:
-		return TypeFloat64, nil
-	// FixStr
-	case c >= 0xa0 && c <= 0xbf:
-		return TypeString, nil
-	// Str8, Str16, Str32
-	case c >= 0xd9 && c <= 0xdb:
-		return TypeString, nil
-	// Bin8, Bin16, Bin32
-	case c >= 0xc4 && c <= 0xc6:
-		return TypeBinary, nil
-	// FixArray, Array16, Array32
-	case c >= 0x90 && c <= 0x9f || c == 0xdc || c == 0xdd:
-		return TypeArray, nil
-	// FixMap, Map16, Map32
-	case c >= 0x80 && c <= 0x8f || c == 0xde || c == 0xdf:
-		return TypeMap, nil
-	// Ext types (including Timestamp)
-	case c >= 0xd4 && c <= 0xd8 || c >= 0xc7 && c <= 0xc9:
-		// We need to read the ext type to determine if it's a Timestamp
-		extType, err := r.peekExtType(c)
-		if err != nil {
-			return TypeExt, nil // If we can't determine, default to TypeExt
-		}
-		if extType == -1 || extType == 0x00 {
-			return TypeTimestamp, nil
-		}
-		return TypeExt, nil
-	default:
-		return TypeUnknown, fmt.Errorf("unknown MessagePack type: 0x%02x", c)
-	}
-}
-
-// peekExtType peeks at the ext type without consuming any data.
-// This is a helper function for PeekType.
-func (r *Reader) peekExtType(c byte) (t int8, err error) {
-	var headerSize int
-
-	switch c {
-	case 0xd4, 0xd5, 0xd6, 0xd7, 0xd8:
-		headerSize = 2
-	case 0xc7:
-		headerSize = 3
-	case 0xc8:
-		headerSize = 4
-	case 0xc9:
-		headerSize = 6
-	default:
-		return 0, fmt.Errorf("invalid ext header byte: 0x%02x", c)
-	}
-
-	header, err := r.b.PeekBytes(headerSize)
-
-	if err != nil {
-		return
-	}
-
-	var extType int8
-	switch headerSize {
-	case 2:
-		extType = int8(header[1])
-	case 3:
-		extType = int8(header[2])
-	case 4:
-		extType = int8(header[3])
-	case 6:
-		extType = int8(header[5])
-	}
-
-	return extType, nil
+	return types.Get(c), nil
 }
 
 // Release resets the reader state after processing a message.
@@ -195,106 +103,55 @@ func (r *Reader) readInt32() (i int, err error) {
 
 // ReadArrayHeader reads an array header from the buffered data.
 func (r *Reader) ReadArrayHeader() (length int, err error) {
-	c, err := r.b.ReadByte()
+	c, err := r.b.PeekByte()
 
 	if err != nil {
 		return
 	}
 
-	var b []byte
-
-	switch {
-
-	case c >= 0x90 && c <= 0x9f:
-		length = int(c & 0x0f)
-
-	case c == 0xdc:
-		length, err = r.readInt16()
-
-	case c == 0xdd:
-		length, err = r.readInt32()
-
-	default:
-		err = fmt.Errorf("invalid array header byte: 0x%02x", b)
+	if err = expectType(c, types.Array); err != nil {
+		return
 	}
 
-	if err != nil {
-		r.b.AdjustPos(-1)
-	}
-
-	return
+	return r.readLen()
 }
 
 // ReadMapHeader reads a map header from the buffered data.
 func (r *Reader) ReadMapHeader() (length int, err error) {
-	c, err := r.b.ReadByte()
+	c, err := r.b.PeekByte()
 
 	if err != nil {
 		return
 	}
 
-	var b []byte
-
-	switch {
-
-	case c >= 0x80 && c <= 0x8f:
-		length = int(c & 0x0f)
-
-	case c == 0xde:
-		length, err = r.readInt16()
-
-	case c == 0xdf:
-		length, err = r.readInt32()
-
-	default:
-		fmt.Errorf("invalid map header byte: 0x%02x", b)
+	if err = expectType(c, types.Map); err != nil {
+		return
 	}
 
-	if err != nil {
-		r.b.AdjustPos(-1)
-	}
-
-	return
+	return r.readLen()
 }
 
 // ReadString reads a string from the buffered data.
 func (r *Reader) ReadString() (str string, err error) {
-	c, err := r.b.ReadByte()
+	pos := r.b.Pos()
+	c, err := r.b.PeekByte()
 
 	if err != nil {
 		return
 	}
 
-	var headLen int
-	var length int
-
-	switch {
-
-	case c >= 0xa0 && c <= 0xbf:
-		length = int(c & 0x1f)
-
-	case c == 0xd9:
-		var v uint8
-		v, err = r.b.ReadByte()
-		headLen = 1
-		length = int(v)
-
-	case c == 0xda:
-		length, err = r.readInt16()
-		headLen = 2
-
-	case c == 0xdb:
-		length, err = r.readInt32()
-		headLen = 4
-
-	default:
-		err = fmt.Errorf("invalid string header byte: 0x%02x", c)
+	if err = expectType(c, types.Map); err != nil {
+		return
 	}
 
-	if err != nil {
-		r.b.AdjustPos(-1)
-	} else if str, err = r.b.ReadString(length); err != nil {
-		r.b.AdjustPos(-(headLen + 1))
+	var length int
+
+	if length, err = r.readLen(); err != nil {
+		return
+	}
+
+	if str, err = r.b.ReadString(length); err != nil {
+		r.b.SetPos(pos)
 	}
 
 	return
@@ -309,6 +166,10 @@ func (r *Reader) ReadInt() (i int64, err error) {
 	}
 
 	var length int
+
+	if length, err = r.readLen(); err != nil {
+		return
+	}
 
 	switch {
 	case c <= 0x7f || c >= 0xe0:
@@ -636,10 +497,6 @@ func (r *Reader) ReadTimestamp() (t time.Time, err error) {
 	}
 
 	return time.Unix(s, ns), nil
-}
-
-func (r *Reader) Skip() error {
-
 }
 
 func (r *Reader) readLen() (length int, err error) {
