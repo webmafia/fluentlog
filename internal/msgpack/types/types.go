@@ -167,20 +167,9 @@ func init() {
 	isLengthValue[0xdf] = false
 }
 
-// Get returns the type of the MessagePack value
-func Get(b byte) Type {
-	return typeLookup[b]
-}
-
-// GetLength returns the length of the MessagePack value
-func GetLength(b byte) (length int, isValueLength bool) {
-	return int(lengthLookup[b]), isLengthValue[b]
-}
-
-func GetInt(b []byte) int {
-	var result int
-	for i := range b {
-		result = (result << 8) | int(b[i])
-	}
-	return result
+// Get returns the type of the MessagePack value, its length, and a boolean indicating the nature of the length.
+// The length represents either the actual value's length (if the boolean is true),
+// or the number of bytes used to encode the value's length (if the boolean is false).
+func Get(c byte) (typ Type, length int, isValueLength bool) {
+	return typeLookup[c], int(lengthLookup[c]), isLengthValue[c]
 }

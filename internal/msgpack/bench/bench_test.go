@@ -1,6 +1,13 @@
 package bench
 
-import "testing"
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
+)
 
 var msgpackLengths = [256]byte{
 	0xc4: 1,
@@ -87,6 +94,51 @@ func LengthFromSwitch(b byte) byte {
 	}
 }
 
+func intFromBuf[T int](b []byte) (v T) {
+	l := len(b) - 1
+
+	for i := range b {
+		v |= T(b[l-i]) << T(8*i)
+	}
+
+	return
+}
+
+func intFromSwitch[T int](b []byte) T {
+	switch len(b) {
+
+	case 1:
+		return T(b[0])
+
+	case 2:
+		return T(binary.BigEndian.Uint16(b))
+
+	case 4:
+		return T(binary.BigEndian.Uint32(b))
+
+	case 8:
+		return T(binary.BigEndian.Uint64(b))
+	}
+
+	return 0
+}
+
+func Benchmark_intDecode(b *testing.B) {
+	buf := binary.BigEndian.AppendUint64(make([]byte, 0, 8), 12345678)
+
+	b.Run("intFromSwitch", func(b *testing.B) {
+		for range b.N {
+			_ = intFromSwitch(buf)
+		}
+	})
+
+	b.Run("intFromBuf", func(b *testing.B) {
+		for range b.N {
+			_ = intFromBuf(buf)
+		}
+	})
+}
+
 // BenchmarkLengthFromArray benchmarks the array-based lookup
 func BenchmarkLengthFromArray(b *testing.B) {
 	for i := 0; i < b.N; i++ {
@@ -99,4 +151,90 @@ func BenchmarkLengthFromSwitch(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = LengthFromSwitch(0xc4)
 	}
+}
+
+func BenchmarkClosureInlining(b *testing.B) {
+	// fn :=
+	c := 1
+
+	b.ResetTimer()
+
+	for i := range b.N {
+		_ = doSomething(i, func(a, b int) int {
+			return a + b + c
+		})
+	}
+}
+
+func doSomething(i int, fn func(a, b int) int) int {
+	return fn(i, 123) + 456
+}
+
+func Benchmark_getLength(b *testing.B) {
+	b.Run("Fixstr", func(b *testing.B) {
+		for range b.N {
+			_, _, err := getLength(0xbf, func(l int) ([]byte, error) {
+				return nil, nil
+			})
+
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("Str", func(b *testing.B) {
+		buf := []byte{1, 2, 3, 4}
+		b.ResetTimer()
+
+		for range b.N {
+			_, _, err := getLength(0xdb, func(l int) ([]byte, error) {
+				return buf, nil
+			})
+
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func getLength(c byte, fn func(l int) ([]byte, error)) (typ types.Type, length int, err error) {
+	typ, length, isValueLength := types.Get(c)
+
+	if length > 0 && !isValueLength {
+		length, err = getEncodedLength(length, fn)
+	}
+
+	return
+}
+
+func getEncodedLength(length int, fn func(l int) ([]byte, error)) (int, error) {
+	buf, err := fn(length)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if len(buf) != length {
+		return 0, fmt.Errorf("expected %d bytes, got %d bytes", length, len(buf))
+	}
+
+	switch length {
+
+	case 1:
+		return int(buf[0]), nil
+
+	case 2:
+		return int(binary.BigEndian.Uint16(buf)), nil
+
+	case 4:
+		return int(binary.BigEndian.Uint32(buf)), nil
+
+	case 8:
+		return int(binary.BigEndian.Uint64(buf)), nil
+
+	}
+
+	return 0, errors.New("invalid length")
 }

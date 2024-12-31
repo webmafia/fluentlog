@@ -20,80 +20,82 @@ var (
 
 type Value []byte
 
-func (v Value) Type() types.Type {
+func (v Value) Type() (t types.Type) {
 	if len(v) == 0 {
 		return types.Nil
 	}
 
-	return types.Get(v[0])
+	t, _, _ = types.Get(v[0])
+	return
 }
 
 func (v Value) Array() iter.Seq[Value] {
 	return func(yield func(Value) bool) {
-		if v.Type() != types.Array {
+		if len(v) == 0 {
 			return
 		}
 
-		length, offset, err := readLen(v, 0)
+		typ, headLength, length, err := getLengthFromBuf(v)
 
-		if err != nil {
+		if err != nil || typ != types.Array {
 			return
 		}
+
+		v = v[headLength:]
 
 		for range length {
-			next, err := Skip(v, offset)
+			next := v.BytesLen()
 
-			if err != nil {
+			if !yield(v[:next]) {
 				return
 			}
 
-			if !yield(v[offset:next]) {
-				return
-			}
-
-			offset = next
+			v = v[next:]
 		}
-
 	}
 }
 
 func (v Value) Map() iter.Seq2[Value, Value] {
 	return func(yield func(key, val Value) bool) {
-		if v.Type() != types.Map {
+		if len(v) == 0 {
 			return
 		}
 
-		length, offset, err := readLen(v, 0)
+		typ, headLength, length, err := getLengthFromBuf(v)
 
-		if err != nil {
+		if err != nil || typ != types.Map {
 			return
 		}
+
+		v = v[headLength:]
 
 		for range length {
-			next, err := Skip(v, offset)
+			next := v.BytesLen()
+			key := v[:next]
+			v = v[next:]
 
-			if err != nil {
+			next = v.BytesLen()
+			val := v[:next]
+			v = v[next:]
+
+			if !yield(key, val) {
 				return
 			}
-
-			next2, err := Skip(v, next)
-
-			if err != nil {
-				return
-			}
-
-			if !yield(v[offset:next], v[next:next2]) {
-				return
-			}
-
-			offset = next2
 		}
-
 	}
 }
 
+func (v Value) BytesLen() (l int) {
+	if len(v) == 0 {
+		return
+	}
+
+	_, headLength, length, _ := getLengthFromBuf(v)
+	return headLength + length
+}
+
 func (v Value) Len() (l int) {
-	l, _, _ = readLen(v, 0)
+	_, _, l, _ = getLengthFromBuf(v)
 	return
 }
 

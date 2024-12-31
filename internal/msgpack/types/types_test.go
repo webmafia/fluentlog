@@ -1,102 +1,92 @@
 package types
 
 import (
-	"encoding/binary"
 	"testing"
 )
 
 func TestGet(t *testing.T) {
 	tests := []struct {
-		input    byte
-		expected Type
-	}{
-		{0x00, Uint},  // Positive FixInt
-		{0x7f, Uint},  // Positive FixInt
-		{0xe0, Int},   // Negative FixInt
-		{0xff, Int},   // Negative FixInt
-		{0xa0, Str},   // FixStr
-		{0xbf, Str},   // FixStr
-		{0x80, Map},   // FixMap
-		{0x8f, Map},   // FixMap
-		{0x90, Array}, // FixArray
-		{0x9f, Array}, // FixArray
-		{0xc0, Nil},   // nil
-		{0xc2, Bool},  // false
-		{0xc3, Bool},  // true
-		{0xca, Float}, // float32
-		{0xcb, Float}, // float64
-		{0xcc, Uint},  // uint8
-		{0xd0, Int},   // int8
-		{0xd9, Str},   // str8
-		{0xdc, Array}, // array16
-		{0xde, Map},   // map16
-		// Add more cases as needed
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := Get(tt.input)
-			if result != tt.expected {
-				t.Errorf("Get(0x%x) = %v; want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetLength(t *testing.T) {
-	tests := []struct {
 		input           byte
+		expectedType    Type
 		expectedLength  int
 		expectedIsValue bool
+		description     string
 	}{
-		{0x00, 0, true},  // Positive FixInt
-		{0xe0, 0, true},  // Negative FixInt
-		{0xa5, 5, true},  // FixStr with length 5
-		{0x85, 10, true}, // FixMap with 5 key-value pairs
-		{0x93, 3, true},  // FixArray with 3 elements
-		{0xc0, 0, true},  // nil
-		{0xc4, 1, false}, // bin8
-		{0xca, 4, true},  // float32
-		{0xd9, 1, false}, // str8
-		{0xdc, 2, false}, // array16
-		{0xde, 2, false}, // map16
-		// Add more cases as needed
+		// Positive FixInt (0x00 to 0x7f)
+		{0x00, Uint, 0, true, "Positive FixInt: smallest value (0)"},
+		{0x7f, Uint, 0, true, "Positive FixInt: largest value (127)"},
+
+		// Negative FixInt (0xe0 to 0xff)
+		{0xe0, Int, 0, true, "Negative FixInt: smallest value (-32)"},
+		{0xff, Int, 0, true, "Negative FixInt: largest value (-1)"},
+
+		// FixStr (0xa0 to 0xbf)
+		{0xa0, Str, 0, true, "FixStr: empty string"},
+		{0xa5, Str, 5, true, "FixStr: string of length 5"},
+		{0xbf, Str, 31, true, "FixStr: largest string length (31)"},
+
+		// FixMap (0x80 to 0x8f)
+		{0x80, Map, 0, true, "FixMap: empty map"},
+		{0x85, Map, 5, true, "FixMap: map with 5 key-value pairs"},
+		{0x8f, Map, 15, true, "FixMap: largest map with 15 key-value pairs"},
+
+		// FixArray (0x90 to 0x9f)
+		{0x90, Array, 0, true, "FixArray: empty array"},
+		{0x93, Array, 3, true, "FixArray: array with 3 elements"},
+		{0x9f, Array, 15, true, "FixArray: largest array with 15 elements"},
+
+		// Fixed types
+		{0xc0, Nil, 0, true, "Nil"},
+		{0xc2, Bool, 0, true, "Bool: false"},
+		{0xc3, Bool, 0, true, "Bool: true"},
+
+		// Binary types
+		{0xc4, Bin, 1, false, "Bin8"},
+		{0xc5, Bin, 2, false, "Bin16"},
+		{0xc6, Bin, 4, false, "Bin32"},
+
+		// Extension types
+		{0xc7, Ext, 1, false, "Ext8"},
+		{0xc8, Ext, 2, false, "Ext16"},
+		{0xc9, Ext, 4, false, "Ext32"},
+
+		// Float types
+		{0xca, Float, 4, true, "Float32"},
+		{0xcb, Float, 8, true, "Float64"},
+
+		// Unsigned integers
+		{0xcc, Uint, 1, true, "Uint8"},
+		{0xcd, Uint, 2, true, "Uint16"},
+		{0xce, Uint, 4, true, "Uint32"},
+		{0xcf, Uint, 8, true, "Uint64"},
+
+		// Signed integers
+		{0xd0, Int, 1, true, "Int8"},
+		{0xd1, Int, 2, true, "Int16"},
+		{0xd2, Int, 4, true, "Int32"},
+		{0xd3, Int, 8, true, "Int64"},
+
+		// String types
+		{0xd9, Str, 1, false, "Str8"},
+		{0xda, Str, 2, false, "Str16"},
+		{0xdb, Str, 4, false, "Str32"},
+
+		// Array types
+		{0xdc, Array, 2, false, "Array16"},
+		{0xdd, Array, 4, false, "Array32"},
+
+		// Map types
+		{0xde, Map, 2, false, "Map16"},
+		{0xdf, Map, 4, false, "Map32"},
 	}
 
 	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			length, isValue := GetLength(tt.input)
-			if length != tt.expectedLength || isValue != tt.expectedIsValue {
-				t.Errorf("GetLength(0x%x) = (%v, %v); want (%v, %v)",
-					tt.input, length, isValue, tt.expectedLength, tt.expectedIsValue)
+		t.Run(tt.description, func(t *testing.T) {
+			typ, length, isValue := Get(tt.input)
+			if typ != tt.expectedType || length != tt.expectedLength || isValue != tt.expectedIsValue {
+				t.Errorf("Get(0x%x) = (%v, %d, %v); want (%v, %d, %v)",
+					tt.input, typ, length, isValue, tt.expectedType, tt.expectedLength, tt.expectedIsValue)
 			}
 		})
 	}
-}
-
-func BenchmarkInt(b *testing.B) {
-	buf := binary.BigEndian.AppendUint64(nil, 12345678)
-
-	b.Run("GetInt", func(b *testing.B) {
-		for range b.N {
-			_ = GetInt(buf)
-		}
-	})
-
-	b.Run("standard", func(b *testing.B) {
-		for range b.N {
-			_ = binary.BigEndian.Uint64(buf)
-		}
-	})
-
-	b.Run("var", func(b *testing.B) {
-		var fn [1]func([]byte) uint64
-		fn[0] = binary.BigEndian.Uint64
-
-		b.ResetTimer()
-
-		for range b.N {
-			_ = fn[0](buf)
-		}
-	})
 }

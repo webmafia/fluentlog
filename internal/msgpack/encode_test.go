@@ -25,7 +25,6 @@ func Example() {
 	b = AppendFloat64(b, 456.789)
 
 	fmt.Println(len(b), ":", b)
-	fmt.Println(GetMsgpackValueLength(b))
 
 	// Output: TODO
 }
@@ -50,16 +49,6 @@ func Benchmark(b *testing.B) {
 
 			buf = AppendString(buf, "c")
 			buf = AppendFloat64(buf, 456.789)
-		}
-	})
-
-	b.Run("ReadLength", func(b *testing.B) {
-		for range b.N {
-			_, err := GetMsgpackValueLength(buf)
-
-			if err != nil {
-				b.Fatal(err)
-			}
 		}
 	})
 }
