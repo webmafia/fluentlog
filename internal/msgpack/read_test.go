@@ -37,12 +37,12 @@ func TestRead(t *testing.T) {
 		// Variable-Length Arrays
 		{[]byte{0xdc, 0x00, 0x03}, types.Array, 3, false, "Array16 with 3 elements"},
 		{[]byte{0xdd, 0x00, 0x00, 0x00, 0x05}, types.Array, 5, false, "Array32 with 5 elements"},
-		{[]byte{0xdc, 0x00, 0x00}, types.Array, 0, true, "Array16 with 0 elements (truncated header)"},
+		{[]byte{0xdc, 0x00, 0x00}, types.Array, 0, false, "Array16 with 0 elements (valid header)"},
 
 		// Variable-Length Maps
 		{[]byte{0xde, 0x00, 0x02}, types.Map, 2, false, "Map16 with 2 key-value pairs"},
 		{[]byte{0xdf, 0x00, 0x00, 0x00, 0x04}, types.Map, 4, false, "Map32 with 4 key-value pairs"},
-		{[]byte{0xde, 0x00, 0x00}, types.Map, 0, true, "Map16 with 0 key-value pairs (truncated header)"},
+		{[]byte{0xde, 0x00, 0x00}, types.Map, 0, false, "Map16 with 0 key-value pairs (valid header)"},
 
 		// Longer Byte Slices
 		{[]byte{0xc2, 0xcc, 0x01, 0xca, 0x40, 0x49, 0x0f, 0xdb}, types.Bool, 0, false, "Bool type followed by Uint8 and Float32 (only Bool read)"},
@@ -76,6 +76,36 @@ func TestRead(t *testing.T) {
 
 			if !tt.expectedErr && !bytes.Equal(b, tt.input[:len(b)]) {
 				t.Errorf("Unexpected output bytes: got %v, want %v", b, tt.input[:len(b)])
+			}
+		})
+	}
+}
+
+func BenchmarkRead(b *testing.B) {
+	benchmarks := []struct {
+		input       []byte
+		description string
+	}{
+		{[]byte{0xc0}, "Nil type"},
+		{[]byte{0xca, 0x40, 0x49, 0x0f, 0xdb}, "Float32 type"},
+		{[]byte{0xcc, 0xff}, "Uint8 type"},
+		{[]byte{0xd9, 0x05, 'h', 'e', 'l', 'l', 'o'}, "Str8 type with 'hello'"},
+		{[]byte{0xde, 0x00, 0x02}, "Map16 with 2 key-value pairs"},
+		{[]byte{0xdc, 0x00, 0x03}, "Array16 with 3 elements"},
+		{[]byte{0xdf, 0x00, 0x00, 0x00, 0x04}, "Map32 with 4 key-value pairs"},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.description, func(b *testing.B) {
+			var dst []byte
+			r := bytes.NewBuffer(nil)
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				r.Reset()
+				r.Write(bm.input)
+				dst, _, _, _ = Read(dst[:0], r)
 			}
 		})
 	}

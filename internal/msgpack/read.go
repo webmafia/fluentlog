@@ -1,9 +1,9 @@
 package msgpack
 
 import (
-	"encoding/binary"
 	"io"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
@@ -12,81 +12,55 @@ import (
 // array or map, otherwise it will always be zero), and any occurred error.
 // Does only read exactly as many bytes as needed for the particular type.
 func Read(dst []byte, r io.Reader) (b []byte, t types.Type, n int, err error) {
-	var firstByte [1]byte
+	var firstByte []byte
+
+	dst, firstByte = appendBuf(dst, 1)
+
 	if _, err = io.ReadFull(r, firstByte[:]); err != nil {
-		return dst, t, n, err
+		return
 	}
+
 	typeByte := firstByte[0]
 	t, length, isValueLength := types.Get(typeByte)
-	dst = append(dst, typeByte) // Append the first byte
+	// dst = append(dst, typeByte) // Append the first byte
+
+	if !isValueLength {
+		var lengthBuf []byte
+
+		dst, lengthBuf = appendBuf(dst, length)
+
+		if _, err = io.ReadFull(r, lengthBuf); err != nil {
+			return
+		}
+
+		// dst = append(dst, lengthBuf[:length]...)
+		length = intFromBuf[int](lengthBuf)
+	}
 
 	if t == types.Array || t == types.Map {
-		// Handle compound types by reading only the header to determine n
-		if isValueLength {
-			n = length // Embedded length directly represents the number of subvalues
-		} else {
-			var lengthBuf [4]byte
-			var headerLength int
-			switch typeByte {
-			case 0xdc, 0xde: // array16, map16
-				headerLength = 2
-			case 0xdd, 0xdf: // array32, map32
-				headerLength = 4
-			}
-
-			if headerLength > 0 {
-				if _, err = io.ReadFull(r, lengthBuf[:headerLength]); err != nil {
-					return dst, t, n, err
-				}
-				dst = append(dst, lengthBuf[:headerLength]...)
-				switch headerLength {
-				case 2:
-					n = int(binary.BigEndian.Uint16(lengthBuf[:2]))
-				case 4:
-					n = int(binary.BigEndian.Uint32(lengthBuf[:4]))
-				}
-			}
-		}
+		n = length
 	} else {
-		// Handle fixed-length or variable-length types
-		if !isValueLength {
-			// Read the length field for variable-length types
-			var lengthBuf [4]byte
-			var headerLength int
-			switch typeByte {
-			case 0xd9, 0xc4: // str8, bin8
-				headerLength = 1
-			case 0xda, 0xc5: // str16, bin16
-				headerLength = 2
-			case 0xdb, 0xc6: // str32, bin32
-				headerLength = 4
-			}
+		var buf []byte
+		dst, buf = appendBuf(dst, length)
 
-			if headerLength > 0 {
-				if _, err = io.ReadFull(r, lengthBuf[:headerLength]); err != nil {
-					return dst, t, n, err
-				}
-				dst = append(dst, lengthBuf[:headerLength]...)
-				switch headerLength {
-				case 1:
-					length = int(lengthBuf[0])
-				case 2:
-					length = int(binary.BigEndian.Uint16(lengthBuf[:2]))
-				case 4:
-					length = int(binary.BigEndian.Uint32(lengthBuf[:4]))
-				}
-			}
-		}
-
-		if length > 0 {
-			// Read the value data
-			valueBuf := make([]byte, length)
-			if _, err = io.ReadFull(r, valueBuf); err != nil {
-				return dst, t, n, err
-			}
-			dst = append(dst, valueBuf...)
+		if _, err = io.ReadFull(r, buf); err != nil {
+			return
 		}
 	}
 
 	return dst, t, n, nil
+}
+
+func appendBuf(dst []byte, n int) (newSlice []byte, buf []byte) {
+	l := len(dst)
+
+	if tot := l + n; tot > cap(dst) {
+		newSlice = fast.MakeNoZeroCap(tot, tot+64)
+		copy(newSlice, dst)
+	} else {
+		newSlice = dst[:tot]
+	}
+
+	buf = newSlice[l:]
+	return
 }
