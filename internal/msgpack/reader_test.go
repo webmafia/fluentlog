@@ -1,157 +1,190 @@
 package msgpack
 
-// func ExampleReader() {
-// 	var b []byte
+import (
+	"bytes"
+	"testing"
 
-// 	b = AppendArray(b, 3)
-// 	b = AppendString(b, "foo.bar")
-// 	b = AppendTimestamp(b, time.Now())
-// 	// b = AppendMap(b, 3)
+	"github.com/webmafia/fast/buffer"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
+)
 
-// 	// b = AppendString(b, "a")
-// 	// b = AppendBool(b, true)
+func TestReader(t *testing.T) {
+	tests := []struct {
+		input          []byte
+		expectedType   types.Type
+		expectedSubval int
+		expectedErr    bool
+		description    string
+	}{
+		// Simple Types
+		{[]byte{0xc0}, types.Nil, 0, false, "Nil type"},
+		{[]byte{0xc3}, types.Bool, 0, false, "Bool type (true)"},
+		{[]byte{0xca, 0x40, 0x49, 0x0f, 0xdb}, types.Float, 0, false, "Float32 type"},
 
-// 	// b = AppendString(b, "b")
-// 	// b = AppendInt(b, 123)
+		// Fixed-length integer types
+		{[]byte{0xcc, 0xff}, types.Uint, 0, false, "Uint8 type"},
+		{[]byte{0xd1, 0x7f, 0xff}, types.Int, 0, false, "Int16 type"},
 
-// 	// b = AppendString(b, "c")
-// 	// b = AppendFloat64(b, 456.789)
+		// String Types
+		{[]byte{0xd9, 0x05, 'h', 'e', 'l', 'l', 'o'}, types.Str, 0, false, "Str8 type with 'hello'"},
+		{[]byte{0xdb, 0x00, 0x00, 0x00, 0x06, 'w', 'o', 'r', 'l', 'd', '!'}, types.Str, 0, false, "Str32 type with 'world!'"},
 
-// 	r := NewReader(bytes.NewReader(b), make([]byte, 4096))
+		// Fixed Compound Types
+		{[]byte{0x80}, types.Map, 0, false, "FixMap: Empty map"},
+		{[]byte{0x85}, types.Map, 5, false, "FixMap: Map with 5 key-value pairs"},
+		{[]byte{0x90}, types.Array, 0, false, "FixArray: Empty array"},
+		{[]byte{0x9f}, types.Array, 15, false, "FixArray: Array with 15 elements"},
 
-// 	fmt.Println(r.PeekType())
-// 	fmt.Println(r.ReadArrayHeader())
+		// Variable-Length Arrays
+		{[]byte{0xdc, 0x00, 0x03}, types.Array, 3, false, "Array16 with 3 elements"},
+		{[]byte{0xdd, 0x00, 0x00, 0x00, 0x05}, types.Array, 5, false, "Array32 with 5 elements"},
+		{[]byte{0xdc, 0x00, 0x00}, types.Array, 0, false, "Array16 with 0 elements (valid header)"},
 
-// 	fmt.Println(r.PeekType())
-// 	fmt.Println(r.ReadString())
+		// Variable-Length Maps
+		{[]byte{0xde, 0x00, 0x02}, types.Map, 2, false, "Map16 with 2 key-value pairs"},
+		{[]byte{0xdf, 0x00, 0x00, 0x00, 0x04}, types.Map, 4, false, "Map32 with 4 key-value pairs"},
+		{[]byte{0xde, 0x00, 0x00}, types.Map, 0, false, "Map16 with 0 key-value pairs (valid header)"},
 
-// 	fmt.Println(r.PeekType())
-// 	fmt.Println(r.ReadTimestamp())
+		// Longer Byte Slices
+		{[]byte{0xc2, 0xcc, 0x01, 0xca, 0x40, 0x49, 0x0f, 0xdb}, types.Bool, 0, false, "Bool type followed by Uint8 and Float32 (only Bool read)"},
+		{[]byte{0x91, 0xcc, 0x05}, types.Array, 1, false, "Array with 1 element (Uint8: 5)"},
+		{[]byte{0xde, 0x00, 0x01, 0xcc, 0x02, 0xd0, 0x03}, types.Map, 1, false, "Map with 1 key-value pair (Uint8: 2 -> Int8: 3, only header read)"},
 
-// 	fmt.Println(r.PeekType())
-// 	fmt.Println(r.ReadMapHeader())
+		// Error cases
+		{[]byte{0xcc}, types.Nil, 0, true, "Truncated Uint8"},
+		{[]byte{0xdc}, types.Nil, 0, true, "Truncated Array16 header"},
+		{[]byte{0xdf, 0x00, 0x00}, types.Nil, 0, true, "Truncated Map32 header"},
+	}
 
-// 	// Output: TODO
-// }
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			r := bytes.NewReader(tt.input)
+			r2 := NewReader(r, &buffer.Buffer{})
 
-// func TestReader_ReadRaw(t *testing.T) {
-// 	// MessagePack-encoded data for an array [1, "hello", [true, false]]
-// 	data := []byte{
-// 		0x93,                               // Array of length 3
-// 		0x01,                               // Integer 1
-// 		0xa5, 0x68, 0x65, 0x6c, 0x6c, 0x6f, // String "hello"
-// 		0x92, // Array of length 2
-// 		0xc3, // True
-// 		0xc2, // False
-// 	}
+			v, n, err := r2.Read()
 
-// 	buffer := make([]byte, 1024)
-// 	reader := NewReader(bytes.NewReader(data), buffer)
+			if (err != nil) != tt.expectedErr {
+				t.Errorf("Unexpected error: got %v, want error=%v", err, tt.expectedErr)
+			}
 
-// 	rawBytes, err := reader.ReadRaw()
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+			if v.Type() != tt.expectedType {
+				t.Errorf("Unexpected type: got %v, want %v", v.Type(), tt.expectedType)
+			}
 
-// 	// Verify that rawBytes matches the original data
-// 	if !bytes.Equal(rawBytes, data) {
-// 		t.Fatalf("expected %x, got %x", data, rawBytes)
-// 	}
-// }
+			if n != tt.expectedSubval {
+				t.Errorf("Unexpected subvalue count: got %d, want %d", n, tt.expectedSubval)
+			}
 
-// func TestReader_ReadTimestamp(t *testing.T) {
-// 	tests := []struct {
-// 		name           string
-// 		input          []byte
-// 		expectedSec    int64
-// 		expectedNsec   int64
-// 		expectedErr    bool
-// 		expectedFormat string // To help identify the type (e.g., fixext8 or ext8)
-// 	}{
-// 		{
-// 			name:           "fixext8 timestamp",
-// 			input:          createFixExt8Timestamp(1609459200, 123456789), // 2021-01-01T00:00:00.123456789Z
-// 			expectedSec:    1609459200,
-// 			expectedNsec:   123456789,
-// 			expectedErr:    false,
-// 			expectedFormat: "fixext8",
-// 		},
-// 		{
-// 			name:           "ext8 timestamp",
-// 			input:          createExt8Timestamp(1609459200, 987654321), // 2021-01-01T00:00:00.987654321Z
-// 			expectedSec:    1609459200,
-// 			expectedNsec:   987654321,
-// 			expectedErr:    false,
-// 			expectedFormat: "ext8",
-// 		},
-// 		{
-// 			name:           "integer timestamp (seconds only)",
-// 			input:          createIntegerTimestamp(1609459200), // 2021-01-01T00:00:00Z
-// 			expectedSec:    1609459200,
-// 			expectedNsec:   0,
-// 			expectedErr:    false,
-// 			expectedFormat: "integer",
-// 		},
-// 		{
-// 			name:           "invalid type",
-// 			input:          []byte{0xd4, 0x00}, // Invalid fixext1
-// 			expectedSec:    0,
-// 			expectedNsec:   0,
-// 			expectedErr:    true,
-// 			expectedFormat: "invalid",
-// 		},
-// 	}
+			if !tt.expectedErr && !bytes.Equal(v, tt.input[:len(v)]) {
+				t.Errorf("Unexpected output bytes: got %v, want %v", v, tt.input[:len(v)])
+			}
+		})
+	}
+}
 
-// 	for _, test := range tests {
-// 		t.Run(test.name, func(t *testing.T) {
-// 			r := NewReader(bytes.NewReader(test.input), make([]byte, 0, 64))
+func BenchmarkReader(b *testing.B) {
+	benchmarks := []struct {
+		input       []byte
+		description string
+	}{
+		{[]byte{0xc0}, "Nil type"},
+		{[]byte{0xca, 0x40, 0x49, 0x0f, 0xdb}, "Float32 type"},
+		{[]byte{0xcc, 0xff}, "Uint8 type"},
+		{[]byte{0xd9, 0x05, 'h', 'e', 'l', 'l', 'o'}, "Str8 type with 'hello'"},
+		{[]byte{0xde, 0x00, 0x02}, "Map16 with 2 key-value pairs"},
+		{[]byte{0xdc, 0x00, 0x03}, "Array16 with 3 elements"},
+		{[]byte{0xdf, 0x00, 0x00, 0x00, 0x04}, "Map32 with 4 key-value pairs"},
+	}
 
-// 			timestamp, err := r.ReadTimestamp()
-// 			if test.expectedErr {
-// 				if err == nil {
-// 					t.Errorf("expected an error but got none")
-// 				}
-// 				return
-// 			}
+	b.Run("Baseline", func(b *testing.B) {
+		r := bytes.NewBuffer(nil)
+		b.ResetTimer()
 
-// 			if err != nil {
-// 				t.Errorf("unexpected error: %v", err)
-// 				return
-// 			}
+		for i := 0; i < b.N; i++ {
+			r.Reset()
+			r.Write([]byte{0xdf, 0x00, 0x00, 0x00, 0x04})
+		}
+	})
 
-// 			if timestamp.Unix() != test.expectedSec || timestamp.Nanosecond() != int(test.expectedNsec) {
-// 				t.Errorf("expected timestamp %d.%09d but got %d.%09d",
-// 					test.expectedSec, test.expectedNsec, timestamp.Unix(), timestamp.Nanosecond())
-// 			}
-// 		})
-// 	}
-// }
+	for _, bm := range benchmarks {
+		b.Run(bm.description, func(b *testing.B) {
+			r := bytes.NewBuffer(nil)
+			r2 := NewReader(r, &buffer.Buffer{})
 
-// // Helper function to create a fixext8 timestamp
-// func createFixExt8Timestamp(sec int64, nsec int64) []byte {
-// 	buf := make([]byte, 10)
-// 	buf[0] = 0xd7 // fixext8
-// 	buf[1] = 0x00 // type: EventTime
-// 	binary.BigEndian.PutUint32(buf[2:6], uint32(sec))
-// 	binary.BigEndian.PutUint32(buf[6:10], uint32(nsec))
-// 	return buf
-// }
+			b.ResetTimer()
 
-// // Helper function to create an ext8 timestamp
-// func createExt8Timestamp(sec int64, nsec int64) []byte {
-// 	buf := make([]byte, 11)
-// 	buf[0] = 0xc7 // ext8
-// 	buf[1] = 0x08 // length: 8
-// 	buf[2] = 0x00 // type: EventTime
-// 	binary.BigEndian.PutUint32(buf[3:7], uint32(sec))
-// 	binary.BigEndian.PutUint32(buf[7:11], uint32(nsec))
-// 	return buf
-// }
+			for i := 0; i < b.N; i++ {
+				r.Reset()
+				r.Write(bm.input)
+				r2.Reset()
+				_, _, _ = r2.Read()
+			}
+		})
+	}
+}
 
-// // Helper function to create an integer timestamp (seconds since epoch)
-// func createIntegerTimestamp(sec int64) []byte {
-// 	buf := make([]byte, 9)
-// 	buf[0] = 0xd3 // int64
-// 	binary.BigEndian.PutUint64(buf[1:], uint64(sec))
-// 	return buf
-// }
+func TestRelease(t *testing.T) {
+	tests := []struct {
+		name        string
+		initialData []byte
+		rn          int
+		releaseN    int
+		expectedBuf []byte
+		expectedN   int
+	}{
+		{
+			name:        "Release with valid n",
+			initialData: []byte{'A', 'B', 'C', 'D', 'E', 'F'},
+			rn:          3,
+			releaseN:    2,
+			expectedBuf: []byte{'A', 'B', 'D', 'E', 'F'},
+			expectedN:   5,
+		},
+		{
+			name:        "Release everything",
+			initialData: []byte{'A', 'B', 'C'},
+			rn:          3,
+			releaseN:    0,
+			expectedBuf: []byte{},
+			expectedN:   0,
+		},
+		{
+			name:        "Release with n beyond r.n",
+			initialData: []byte{'A', 'B', 'C'},
+			rn:          2,
+			releaseN:    3,
+			expectedBuf: []byte{'A', 'B', 'C'},
+			expectedN:   2,
+		},
+		{
+			name:        "Release with negative n",
+			initialData: []byte{'A', 'B', 'C'},
+			rn:          2,
+			releaseN:    -1,
+			expectedBuf: []byte{'A', 'B', 'C'},
+			expectedN:   2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			buf := buffer.NewBuffer(64)
+			buf.B = append(buf.B, test.initialData...)
+
+			r := Reader{
+				b: buf,
+				n: test.rn,
+			}
+
+			r.Release(test.releaseN)
+
+			if !bytes.Equal(r.b.B, test.expectedBuf) {
+				t.Errorf("buffer mismatch: got %v, want %v", r.b.B, test.expectedBuf)
+			}
+
+			if r.n != test.expectedN {
+				t.Errorf("position mismatch: got %d, want %d", r.n, test.expectedN)
+			}
+		})
+	}
+}
