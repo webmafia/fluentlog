@@ -61,7 +61,7 @@ func TestReader(t *testing.T) {
 			r := bytes.NewReader(tt.input)
 			r2 := NewReader(r, &buffer.Buffer{})
 
-			v, n, err := r2.Read()
+			v, err := r2.Read()
 
 			if (err != nil) != tt.expectedErr {
 				t.Errorf("Unexpected error: got %v, want error=%v", err, tt.expectedErr)
@@ -71,8 +71,10 @@ func TestReader(t *testing.T) {
 				t.Errorf("Unexpected type: got %v, want %v", v.Type(), tt.expectedType)
 			}
 
-			if n != tt.expectedSubval {
-				t.Errorf("Unexpected subvalue count: got %d, want %d", n, tt.expectedSubval)
+			if v.Type() == types.Array || v.Type() == types.Map {
+				if n := v.Len(); n != tt.expectedSubval {
+					t.Errorf("Unexpected subvalue count: got %d, want %d", n, tt.expectedSubval)
+				}
 			}
 
 			if !tt.expectedErr && !bytes.Equal(v, tt.input[:len(v)]) {
@@ -117,7 +119,7 @@ func BenchmarkReader(b *testing.B) {
 				r.Reset()
 				r.Write(bm.input)
 				r2.Reset()
-				_, _, _ = r2.Read()
+				_, _ = r2.Read()
 			}
 		})
 	}

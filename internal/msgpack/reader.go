@@ -27,7 +27,7 @@ func (r *Reader) Reset() {
 	r.n = 0
 }
 
-func (r *Reader) Read() (v Value, n int, err error) {
+func (r *Reader) Read() (v Value, err error) {
 	start := r.n
 
 	if err = r.fill(1); err != nil {
@@ -48,9 +48,7 @@ func (r *Reader) Read() (v Value, n int, err error) {
 		length = intFromBuf[int](r.b.B[pos:r.n])
 	}
 
-	if t == types.Array || t == types.Map {
-		n = length
-	} else {
+	if t != types.Array && t != types.Map {
 		if err = r.fill(length); err != nil {
 			return
 		}

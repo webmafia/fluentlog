@@ -2,32 +2,10 @@ package msgpack
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"testing"
 	"time"
 )
-
-func Example() {
-	var b []byte
-	b = AppendArray(b, 3)
-	b = AppendString(b, "foo.bar")
-	b = AppendTimestamp(b, time.Now())
-	b = AppendMap(b, 3)
-
-	b = AppendString(b, "a")
-	b = AppendBool(b, true)
-
-	b = AppendString(b, "b")
-	b = AppendInt(b, 123)
-
-	b = AppendString(b, "c")
-	b = AppendFloat64(b, 456.789)
-
-	fmt.Println(len(b), ":", b)
-
-	// Output: TODO
-}
 
 func Benchmark(b *testing.B) {
 	var buf []byte

@@ -95,7 +95,12 @@ func (v Value) BytesLen() (l int) {
 }
 
 func (v Value) Len() (l int) {
-	_, _, l, _ = getLengthFromBuf(v)
+	_, l, isValueLength := types.Get(v[0])
+
+	if !isValueLength {
+		l = intFromBuf[int](v[1 : 1+l])
+	}
+
 	return
 }
 
@@ -115,10 +120,10 @@ func (v Value) Uint() (val uint64) {
 }
 
 func (v Value) Float() float64 {
-	if v[0]&0xf0 == Float32 {
-		val, _, _ := ReadFloat32(v, 0)
-		return float64(val)
-	}
+	// if v[0]&0xf0 == Float32 {
+	// 	val, _, _ := ReadFloat32(v, 0)
+	// 	return float64(val)
+	// }
 
 	val, _, _ := ReadFloat64(v, 0)
 

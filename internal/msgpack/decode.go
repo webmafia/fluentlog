@@ -95,6 +95,9 @@ func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error)
 // ReadInt reads an integer value from src starting at offset.
 // It returns the integer value and the new offset after reading.
 func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
+	typ, length, isValueLength := types.Get(src[offset])
+	_ = isValueLength
+
 	typ, head, length, err := getLengthFromBuf(src[offset:])
 
 	if err != nil {

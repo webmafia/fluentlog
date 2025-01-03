@@ -1,6 +1,9 @@
 package msgpack
 
-import "fmt"
+import (
+	"fmt"
+	"testing"
+)
 
 func ExampleValue_Array() {
 	var buf Value
@@ -37,4 +40,15 @@ func ExampleValue_Map() {
 	}
 
 	// Output: TODO
+}
+
+func BenchmarkValueLen(b *testing.B) {
+	var v Value
+	v = AppendArray(v, 3)
+
+	b.ResetTimer()
+
+	for range b.N {
+		_ = v.Len()
+	}
 }
