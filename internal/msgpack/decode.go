@@ -361,20 +361,3 @@ func ReadFloat64(src []byte, offset int) (value float64, newOffset int, err erro
 	offset += 8
 	return value, offset, nil
 }
-
-func skipOffset(src []byte, offset int) (newOffset int) {
-	typ, length, _ := types.Get(src[offset])
-	offset += 1
-
-	if typ == types.Map {
-		length *= 2
-	} else if typ != types.Array {
-		return offset + length
-	}
-
-	for range length {
-		offset = skipOffset(src, offset)
-	}
-
-	return offset
-}
