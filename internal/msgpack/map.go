@@ -2,6 +2,8 @@ package msgpack
 
 import "github.com/webmafia/fluentlog/internal/msgpack/types"
 
+// AppendMapHeader appends a map header with `n` key-value pairs to `dst` as a MessagePack-encoded value.
+// Returns the updated byte slice.
 func AppendMapHeader(dst []byte, n int) []byte {
 	switch {
 	case n <= 15:
@@ -13,8 +15,8 @@ func AppendMapHeader(dst []byte, n int) []byte {
 	}
 }
 
-// ReadMapHeader reads a map header from src starting at offset.
-// It returns the number of key-value pairs and the new offset after reading.
+// ReadMapHeader reads a map header from `src` starting at `offset`.
+// Returns the number of key-value pairs, the new offset, and an error if the header is invalid.
 func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error) {
 	typ, length, isValueLength := types.Get(src[offset])
 

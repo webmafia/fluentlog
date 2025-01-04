@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Append a Fluentd Forward EventTime with millisecond precision. This isn't really part of
-// the MessagePack specification, but an Extension type. Located here for convenience.
+// AppendEventTime appends a Fluentd Forward EventTime (with seconds and nanoseconds) to `dst`.
+// Returns the updated byte slice.
 func AppendEventTime(dst []byte, t time.Time) []byte {
 	s, ns := uint32(t.Unix()), uint32(t.Nanosecond())
 
@@ -32,12 +32,15 @@ func AppendEventTime(dst []byte, t time.Time) []byte {
 	)
 }
 
+// AppendEventTimeShort appends a short-form Unix timestamp (seconds only) to `dst`.
+// Returns the updated byte slice.
 func AppendEventTimeShort(dst []byte, t time.Time) []byte {
 	return AppendInt(dst, t.UTC().Unix())
 }
 
-// ReadTimestamp reads a timestamp value from the given byte slice starting at the specified offset.
-// It supports both EventTime (ext type 0) and integer timestamps.
+// ReadEventTime reads a timestamp from `src` starting at `offset`.
+// Supports both Fluentd Forward EventTime and standard Unix timestamps.
+// Returns the decoded time, the new offset, and an error if the data is invalid or incomplete.
 func ReadEventTime(src []byte, offset int) (t time.Time, newOffset int, err error) {
 	if offset >= len(src) {
 		err = io.ErrUnexpectedEOF

@@ -7,6 +7,8 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
+// AppendInt appends the integer `i` as a MessagePack-encoded value to `dst`.
+// Returns the updated byte slice.
 func AppendInt(dst []byte, i int64) []byte {
 	if i >= 0 {
 		return AppendUint(dst, uint64(i))
@@ -32,8 +34,8 @@ func AppendInt(dst []byte, i int64) []byte {
 	}
 }
 
-// ReadInt reads an integer value from src starting at offset.
-// It returns the integer value and the new offset after reading.
+// ReadInt reads a MessagePack-encoded integer from `src` starting at `offset`.
+// Returns the integer value, the new offset, and an error if the data is invalid or incomplete.
 func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
@@ -77,6 +79,8 @@ func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 	return
 }
 
+// AppendUint appends the unsigned integer `i` as a MessagePack-encoded value to `dst`.
+// Returns the updated byte slice.
 func AppendUint(dst []byte, i uint64) []byte {
 	switch {
 	case i <= 127:
@@ -98,8 +102,8 @@ func AppendUint(dst []byte, i uint64) []byte {
 	}
 }
 
-// ReadUint reads an unsigned integer value from src starting at offset.
-// It returns the unsigned integer value and the new offset after reading.
+// ReadUint reads a MessagePack-encoded unsigned integer from `src` starting at `offset`.
+// Returns the unsigned integer value, the new offset, and an error if the data is invalid or incomplete.
 func ReadUint(src []byte, offset int) (value uint64, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer

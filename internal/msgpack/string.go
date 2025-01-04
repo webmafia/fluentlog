@@ -8,6 +8,8 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
+// AppendString appends the string `s` as a MessagePack-encoded value to `dst`.
+// Returns the updated byte slice.
 func AppendString(dst []byte, s string) []byte {
 	l := len(s)
 	switch {
@@ -23,6 +25,9 @@ func AppendString(dst []byte, s string) []byte {
 	return append(dst, s...)
 }
 
+// ReadString reads a MessagePack-encoded string from `src` starting at `offset`.
+// Returns a zero-copy reference to the string from the `src` slice, the new offset,
+// and an error if the data is invalid or incomplete.
 func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
 	typ, length, isValueLength := types.Get(src[offset])
 
@@ -44,8 +49,8 @@ func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
 	return
 }
 
-// ReadString reads a string from src starting at offset.
-// It returns the string and the new offset after reading.
+// ReadStringCopy reads a MessagePack-encoded string from `src` starting at `offset`.
+// Returns a copy of the string, the new offset, and an error if the data is invalid or incomplete.
 func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error) {
 	s, newOffset, err = ReadString(src, offset)
 
@@ -56,6 +61,8 @@ func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error)
 	return
 }
 
+// AppendTextAppender appends a string to `dst` using a `TextAppender` and encodes it as a MessagePack string.
+// Returns the updated byte slice.
 func AppendTextAppender(dst []byte, s internal.TextAppender) []byte {
 	return AppendStringUnknownLength(dst, func(dst []byte) []byte {
 		dst, _ = s.AppendText(dst)
@@ -63,8 +70,9 @@ func AppendTextAppender(dst []byte, s internal.TextAppender) []byte {
 	})
 }
 
+// AppendStringUnknownLength appends a string with an unknown length to `dst` as a MessagePack-encoded value.
+// The string data is appended using the provided function `fn`. Returns the updated byte slice.
 func AppendStringUnknownLength(dst []byte, fn func(dst []byte) []byte) []byte {
-
 	// We don't know the length of the string, so assume the longest possible string.
 	start := len(dst)
 	dst = append(dst, 0xdb, 0, 0, 0, 0)
@@ -73,7 +81,7 @@ func AppendStringUnknownLength(dst []byte, fn func(dst []byte) []byte) []byte {
 	sizeTo := len(dst)
 	l := sizeTo - sizeFrom
 
-	// Now we know how many bytes that were appended - update the head accordingly.
+	// Now we know how many bytes were appended - update the header accordingly.
 	dst[start+1] = byte(l >> 24)
 	dst[start+2] = byte(l >> 16)
 	dst[start+3] = byte(l >> 8)

@@ -2,6 +2,8 @@ package msgpack
 
 import "github.com/webmafia/fluentlog/internal/msgpack/types"
 
+// AppendArrayHeader appends a MessagePack array header to `dst` based on the number of elements `n`.
+// Returns the updated byte slice.
 func AppendArrayHeader(dst []byte, n int) []byte {
 	switch {
 	case n <= 15:
@@ -13,8 +15,8 @@ func AppendArrayHeader(dst []byte, n int) []byte {
 	}
 }
 
-// ReadArrayHeader reads an array header from src starting at offset.
-// It returns the length of the array and the new offset after reading.
+// ReadArrayHeader reads a MessagePack array header from `src` starting at `offset`.
+// Returns the array length, the new offset, and an error if the header is invalid.
 func ReadArrayHeader(src []byte, offset int) (length int, newOffset int, err error) {
 	typ, length, isValueLength := types.Get(src[offset])
 

@@ -5,6 +5,8 @@ import (
 	"math"
 )
 
+// AppendFloat appends a floating-point value (`f`) as a MessagePack-encoded float32 or float64 to `dst`.
+// Returns the updated byte slice.
 func AppendFloat(dst []byte, f float64) []byte {
 	// Check if the float can be represented as float32 without loss
 	if f32 := float32(f); float64(f32) == f {
@@ -19,6 +21,8 @@ func AppendFloat(dst []byte, f float64) []byte {
 		byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
 }
 
+// ReadFloat reads a MessagePack-encoded floating-point value from `src` starting at `offset`.
+// Returns the floating-point value, the new offset, and an error if the data is invalid or incomplete.
 func ReadFloat(src []byte, offset int) (value float64, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
