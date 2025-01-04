@@ -35,13 +35,22 @@ func (v Value) Array() iter.Seq[Value] {
 			return
 		}
 
-		typ, headLength, length, err := getLengthFromBuf(v)
+		var offset int
+		typ, length, isValueLength := types.Get(v[offset])
 
-		if err != nil || typ != types.Array {
+		if typ != types.Array {
 			return
 		}
 
-		v = v[headLength:]
+		offset++
+
+		if !isValueLength {
+			l := length
+			length = intFromBuf[int](v[offset : offset+l])
+			offset += l
+		}
+
+		v = v[offset:]
 
 		for range length {
 			next := v.BytesLen()
@@ -61,13 +70,22 @@ func (v Value) Map() iter.Seq2[Value, Value] {
 			return
 		}
 
-		typ, headLength, length, err := getLengthFromBuf(v)
+		var offset int
+		typ, length, isValueLength := types.Get(v[offset])
 
-		if err != nil || typ != types.Map {
+		if typ != types.Map {
 			return
 		}
 
-		v = v[headLength:]
+		offset++
+
+		if !isValueLength {
+			l := length
+			length = intFromBuf[int](v[offset : offset+l])
+			offset += l
+		}
+
+		v = v[offset:]
 
 		for range length {
 			next := v.BytesLen()
@@ -85,16 +103,41 @@ func (v Value) Map() iter.Seq2[Value, Value] {
 	}
 }
 
+// Returns the total number of bytes for the value. Head + body is included
+// for all types except array and maps, where the body is excluded.
 func (v Value) BytesLen() (l int) {
 	if len(v) == 0 {
 		return
 	}
 
-	_, headLength, length, _ := getLengthFromBuf(v)
-	return headLength + length
+	var offset int
+	typ, length, isValueLength := types.Get(v[offset])
+
+	offset++
+
+	if !isValueLength {
+		l := length
+		length = intFromBuf[int](v[offset : offset+l])
+		offset += l
+	}
+
+	if typ != types.Array && typ != types.Map {
+		offset += length
+	}
+
+	return offset
+}
+
+// Whether the value has its full bytes.
+func (v Value) IsComplete() bool {
+	return len(v) >= v.BytesLen()
 }
 
 func (v Value) Len() (l int) {
+	if len(v) == 0 {
+		return
+	}
+
 	_, l, isValueLength := types.Get(v[0])
 
 	if !isValueLength {

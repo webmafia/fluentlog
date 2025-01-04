@@ -27,36 +27,44 @@ func expectedType(c byte, expected types.Type) (err error) {
 // ReadArrayHeader reads an array header from src starting at offset.
 // It returns the length of the array and the new offset after reading.
 func ReadArrayHeader(src []byte, offset int) (length int, newOffset int, err error) {
-	typ, head, length, err := getLengthFromBuf(src[offset:])
-
-	if err != nil {
-		return
-	}
+	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Array {
 		err = expectedType(src[offset], types.Array)
 		return
 	}
 
-	newOffset = offset + head
+	offset++
+
+	if !isValueLength {
+		l := length
+		length = intFromBuf[int](src[offset : offset+l])
+		offset += l
+	}
+
+	newOffset = offset
 	return
 }
 
 // ReadMapHeader reads a map header from src starting at offset.
 // It returns the number of key-value pairs and the new offset after reading.
 func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error) {
-	typ, head, length, err := getLengthFromBuf(src[offset:])
-
-	if err != nil {
-		return
-	}
+	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Map {
 		err = expectedType(src[offset], types.Map)
 		return
 	}
 
-	newOffset = offset + head
+	offset++
+
+	if !isValueLength {
+		l := length
+		length = intFromBuf[int](src[offset : offset+l])
+		offset += l
+	}
+
+	newOffset = offset
 	return
 }
 
