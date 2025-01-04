@@ -14,10 +14,10 @@ func Benchmark(b *testing.B) {
 		for range b.N {
 			buf = buf[:0]
 
-			buf = AppendArray(buf, 3)
+			buf = AppendArrayHeader(buf, 3)
 			buf = AppendString(buf, "foo.bar")
-			buf = AppendTimestamp(buf, time.Now())
-			buf = AppendMap(buf, 3)
+			buf = AppendEventTime(buf, time.Now())
+			buf = AppendMapHeader(buf, 3)
 
 			buf = AppendString(buf, "a")
 			buf = AppendBool(buf, true)
@@ -44,7 +44,7 @@ func TestAppendArray(t *testing.T) {
 	}
 	for _, tt := range tests {
 		dst := []byte{}
-		got := AppendArray(dst, tt.n)
+		got := AppendArrayHeader(dst, tt.n)
 		if !bytes.Equal(got, tt.want) {
 			t.Errorf("AppendArray(%d) = %x; want %x", tt.n, got, tt.want)
 		}
@@ -64,7 +64,7 @@ func TestAppendMap(t *testing.T) {
 	}
 	for _, tt := range tests {
 		dst := []byte{}
-		got := AppendMap(dst, tt.n)
+		got := AppendMapHeader(dst, tt.n)
 		if !bytes.Equal(got, tt.want) {
 			t.Errorf("AppendMap(%d) = %x; want %x", tt.n, got, tt.want)
 		}
@@ -244,7 +244,7 @@ func TestAppendFloat64(t *testing.T) {
 func TestAppendTimestamp(t *testing.T) {
 	testTime := time.Unix(1577836800, 0).UTC() // 2020-01-01 00:00:00 UTC
 	dst := []byte{}
-	got := AppendTimestamp(dst, testTime)
+	got := AppendEventTimeShort(dst, testTime)
 	want := []byte{0xd6, 0xff, 0x5e, 0x0b, 0xe1, 0x00} // fixext4, -1, seconds
 
 	if !bytes.Equal(got, want) {
@@ -254,7 +254,7 @@ func TestAppendTimestamp(t *testing.T) {
 
 func TestAppendFunctionsCombined(t *testing.T) {
 	dst := []byte{}
-	dst = AppendArray(dst, 4) // [tag, time, record, option]
+	dst = AppendArrayHeader(dst, 4) // [tag, time, record, option]
 
 	// Append tag
 	tag := "myapp.access" // 12 characters
@@ -262,15 +262,15 @@ func TestAppendFunctionsCombined(t *testing.T) {
 
 	// Append timestamp
 	now := time.Unix(1577836800, 0).UTC() // Fixed time
-	dst = AppendTimestamp(dst, now)
+	dst = AppendEventTimeShort(dst, now)
 
 	// Append record map with one key-value pair
-	dst = AppendMap(dst, 1)
+	dst = AppendMapHeader(dst, 1)
 	dst = AppendString(dst, "message")
 	dst = AppendString(dst, "hello world")
 
 	// Append empty option map
-	dst = AppendMap(dst, 0)
+	dst = AppendMapHeader(dst, 0)
 
 	// Expected bytes
 	want := []byte{

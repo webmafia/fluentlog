@@ -32,12 +32,12 @@ func (w Writer) WriteTo(wr io.Writer) (int64, error) {
 
 // WriteArrayHeader appends an array header to the buffer.
 func (w Writer) WriteArrayHeader(n int) {
-	w.b.B = AppendArray(w.b.B, n)
+	w.b.B = AppendArrayHeader(w.b.B, n)
 }
 
 // WriteMapHeader appends a map header to the buffer.
 func (w Writer) WriteMapHeader(n int) {
-	w.b.B = AppendMap(w.b.B, n)
+	w.b.B = AppendMapHeader(w.b.B, n)
 }
 
 // WriteString appends a string to the buffer.
@@ -81,13 +81,13 @@ func (w Writer) WriteFloat64(f float64) {
 }
 
 // WriteTimestamp appends a timestamp to the buffer.
-func (w Writer) WriteTimestamp(t time.Time) {
-	w.b.B = AppendTimestamp(w.b.B, t)
+func (w Writer) WriteEventTime(t time.Time) {
+	w.b.B = AppendEventTime(w.b.B, t)
 }
 
 // WriteTimestamp appends a timestamp with millisecond precision to the buffer.
-func (w Writer) WriteExtendedTimestamp(t time.Time) {
-	w.b.B = AppendExtendedTimestamp(w.b.B, t)
+func (w Writer) WriteEventTimeShort(t time.Time) {
+	w.b.B = AppendEventTimeShort(w.b.B, t)
 }
 
 // WriteCustom appends custom data to the buffer using a provided function.

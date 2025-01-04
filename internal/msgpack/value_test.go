@@ -8,7 +8,7 @@ import (
 func ExampleValue_Array() {
 	var buf Value
 
-	buf = AppendArray(buf, 3)
+	buf = AppendArrayHeader(buf, 3)
 	buf = AppendString(buf, "foo")
 	buf = AppendString(buf, "bar")
 	buf = AppendString(buf, "baz")
@@ -25,7 +25,7 @@ func ExampleValue_Array() {
 func ExampleValue_Map() {
 	var buf Value
 
-	buf = AppendMap(buf, 3)
+	buf = AppendMapHeader(buf, 3)
 	buf = AppendString(buf, "foo")
 	buf = AppendInt(buf, 123)
 	buf = AppendString(buf, "bar")
@@ -44,7 +44,7 @@ func ExampleValue_Map() {
 
 func BenchmarkValueLen(b *testing.B) {
 	var v Value
-	v = AppendArray(v, 3)
+	v = AppendArrayHeader(v, 3)
 
 	b.ResetTimer()
 

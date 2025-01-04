@@ -183,7 +183,7 @@ func TestReadBool(t *testing.T) {
 func TestReadTimestamp(t *testing.T) {
 	testTime := time.Unix(1577836800, 0).UTC()
 	input := []byte{0xd6, 0xff, 0x5e, 0x0b, 0xe1, 0x00}
-	tParsed, newOffset, err := ReadTimestamp(input, 0)
+	tParsed, newOffset, err := ReadEventTime(input, 0)
 	if err != nil {
 		t.Errorf("ReadTimestamp failed: %v", err)
 	}

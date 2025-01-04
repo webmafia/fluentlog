@@ -2,7 +2,7 @@ package msgpack
 
 import "github.com/webmafia/fluentlog/internal/msgpack/types"
 
-func AppendMap(dst []byte, n int) []byte {
+func AppendMapHeader(dst []byte, n int) []byte {
 	switch {
 	case n <= 15:
 		return append(dst, 0x80|byte(n))

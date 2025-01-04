@@ -2,7 +2,7 @@ package msgpack
 
 import "github.com/webmafia/fluentlog/internal/msgpack/types"
 
-func AppendArray(dst []byte, n int) []byte {
+func AppendArrayHeader(dst []byte, n int) []byte {
 	switch {
 	case n <= 15:
 		return append(dst, 0x90|byte(n))

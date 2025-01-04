@@ -72,6 +72,6 @@ func BenchmarkReadTimestamp(b *testing.B) {
 	src := []byte{0xd7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} // Example timestamp: 0
 	offset := 0
 	for i := 0; i < b.N; i++ {
-		_, _, _ = ReadTimestamp(src, offset)
+		_, _, _ = ReadEventTime(src, offset)
 	}
 }

@@ -10,10 +10,10 @@ import (
 
 func Example() {
 	var b []byte
-	b = AppendArray(b, 3)
+	b = AppendArrayHeader(b, 3)
 	b = AppendString(b, "foo.bar")
-	b = AppendTimestamp(b, time.Now())
-	b = AppendMap(b, 3)
+	b = AppendEventTime(b, time.Now())
+	b = AppendMapHeader(b, 3)
 
 	b = AppendString(b, "a")
 	b = AppendBool(b, true)
