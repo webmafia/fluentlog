@@ -70,14 +70,9 @@ func (w Writer) WriteBinary(data []byte) {
 	w.b.B = AppendBinary(w.b.B, data)
 }
 
-// WriteFloat32 appends a 32-bit floating-point number to the buffer.
-func (w Writer) WriteFloat32(f float32) {
-	w.b.B = AppendFloat32(w.b.B, f)
-}
-
 // WriteFloat64 appends a 64-bit floating-point number to the buffer.
-func (w Writer) WriteFloat64(f float64) {
-	w.b.B = AppendFloat64(w.b.B, f)
+func (w Writer) WriteFloat(f float64) {
+	w.b.B = AppendFloat(w.b.B, f)
 }
 
 // WriteTimestamp appends a timestamp to the buffer.

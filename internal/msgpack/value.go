@@ -162,15 +162,9 @@ func (v Value) Uint() (val uint64) {
 	return
 }
 
-func (v Value) Float() float64 {
-	// if v[0]&0xf0 == Float32 {
-	// 	val, _, _ := ReadFloat32(v, 0)
-	// 	return float64(val)
-	// }
-
-	val, _, _ := ReadFloat64(v, 0)
-
-	return val
+func (v Value) Float() (val float64) {
+	val, _, _ = ReadFloat(v, 0)
+	return
 }
 
 func (v Value) Str() (val string) {

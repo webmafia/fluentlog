@@ -52,19 +52,11 @@ func BenchmarkReadBinary(b *testing.B) {
 	}
 }
 
-func BenchmarkReadFloat32(b *testing.B) {
-	src := []byte{0xca, 0x41, 0x20, 0x00, 0x00} // Example float32: 10.0
-	offset := 0
-	for i := 0; i < b.N; i++ {
-		_, _, _ = ReadFloat32(src, offset)
-	}
-}
-
-func BenchmarkReadFloat64(b *testing.B) {
+func BenchmarkReadFloat(b *testing.B) {
 	src := []byte{0xcb, 0x40, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} // Example float64: 10.0
 	offset := 0
 	for i := 0; i < b.N; i++ {
-		_, _, _ = ReadFloat64(src, offset)
+		_, _, _ = ReadFloat(src, offset)
 	}
 }
 

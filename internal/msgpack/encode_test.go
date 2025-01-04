@@ -26,7 +26,7 @@ func Benchmark(b *testing.B) {
 			buf = AppendInt(buf, 123)
 
 			buf = AppendString(buf, "c")
-			buf = AppendFloat64(buf, 456.789)
+			buf = AppendFloat(buf, 456.789)
 		}
 	})
 }
@@ -203,26 +203,7 @@ func TestAppendBinary(t *testing.T) {
 	}
 }
 
-func TestAppendFloat32(t *testing.T) {
-	tests := []struct {
-		f    float32
-		want []byte
-	}{
-		{0.0, []byte{0xca, 0x00, 0x00, 0x00, 0x00}},
-		{math.Pi, []byte{0xca, 0x40, 0x49, 0x0f, 0xdb}},
-		{-math.Pi, []byte{0xca, 0xc0, 0x49, 0x0f, 0xdb}},
-		{math.MaxFloat32, []byte{0xca, 0x7f, 0x7f, 0xff, 0xff}},
-	}
-	for _, tt := range tests {
-		dst := []byte{}
-		got := AppendFloat32(dst, tt.f)
-		if !bytes.Equal(got, tt.want) {
-			t.Errorf("AppendFloat32(%v) = %x; want %x", tt.f, got, tt.want)
-		}
-	}
-}
-
-func TestAppendFloat64(t *testing.T) {
+func TestAppendFloat(t *testing.T) {
 	tests := []struct {
 		f    float64
 		want []byte
@@ -234,7 +215,7 @@ func TestAppendFloat64(t *testing.T) {
 	}
 	for _, tt := range tests {
 		dst := []byte{}
-		got := AppendFloat64(dst, tt.f)
+		got := AppendFloat(dst, tt.f)
 		if !bytes.Equal(got, tt.want) {
 			t.Errorf("AppendFloat64(%v) = %x; want %x", tt.f, got, tt.want)
 		}
