@@ -61,20 +61,21 @@ func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error
 }
 
 func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
-	typ, head, length, err := getLengthFromBuf(src[offset:])
-
-	if err != nil {
-		return
-	}
+	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Str {
 		err = expectedType(src[offset], types.Str)
 		return
 	}
 
-	offset += head
+	offset++
 
-	// Extract the string and return
+	if !isValueLength {
+		l := length
+		length = intFromBuf[int](src[offset : offset+l])
+		offset += l
+	}
+
 	s = fast.BytesToString(src[offset : offset+length])
 	newOffset = offset + length
 	return
@@ -95,46 +96,91 @@ func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error)
 // ReadInt reads an integer value from src starting at offset.
 // It returns the integer value and the new offset after reading.
 func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
-	typ, length, isValueLength := types.Get(src[offset])
-	_ = isValueLength
-
-	typ, head, length, err := getLengthFromBuf(src[offset:])
-
-	if err != nil {
-		return
+	if offset >= len(src) {
+		return 0, offset, ErrShortBuffer
 	}
 
-	if typ != types.Int && typ != types.Uint {
-		err = expectedType(src[offset], types.Int)
-		return
+	c := src[offset]
+	typ, length, isValueLength := types.Get(c)
+	newOffset = offset + 1
+
+	if typ != types.Int {
+		return 0, offset, fmt.Errorf("invalid int header byte: 0x%02x", c)
 	}
 
-	offset += head
-	value = intFromBuf[int64](src[offset : offset+length])
-	offset += length
+	if isValueLength && length == 0 {
+		// Directly extract FixInt value
+		if c >= 0xe0 { // Negative FixInt
+			return int64(int8(c)), newOffset, nil
+		}
+		return int64(c), newOffset, nil // Positive FixInt
+	}
 
-	return value, offset, nil
+	// Extract multi-byte integer
+	if newOffset+length > len(src) {
+		return 0, offset, ErrShortBuffer
+	}
+
+	switch length {
+	case 1:
+		value = int64(int8(src[newOffset]))
+	case 2:
+		value = int64(int16(binary.BigEndian.Uint16(src[newOffset:])))
+	case 4:
+		value = int64(int32(binary.BigEndian.Uint32(src[newOffset:])))
+	case 8:
+		value = int64(binary.BigEndian.Uint64(src[newOffset:]))
+	default:
+		return 0, offset, fmt.Errorf("unsupported int length: %d", length)
+	}
+
+	newOffset += length
+	return
 }
 
 // ReadUint reads an unsigned integer value from src starting at offset.
 // It returns the unsigned integer value and the new offset after reading.
 func ReadUint(src []byte, offset int) (value uint64, newOffset int, err error) {
-	typ, head, length, err := getLengthFromBuf(src[offset:])
-
-	if err != nil {
-		return
+	if offset >= len(src) {
+		return 0, offset, ErrShortBuffer
 	}
 
-	if typ != types.Uint {
-		err = expectedType(src[offset], types.Uint)
-		return
+	c := src[offset]
+	typ, length, isValueLength := types.Get(c)
+	newOffset = offset + 1
+
+	if typ != types.Uint && typ != types.Int {
+		return 0, offset, fmt.Errorf("invalid uint header byte: 0x%02x", c)
 	}
 
-	offset += head
-	value = intFromBuf[uint64](src[offset : offset+length])
-	offset += length
+	if isValueLength && length == 0 {
+		// Directly extract FixInt value
+		if c <= 0x7f { // Positive FixInt
+			return uint64(c), newOffset, nil
+		}
+		return 0, offset, fmt.Errorf("negative value cannot be read as uint")
+	}
 
-	return value, offset, nil
+	// Extract multi-byte unsigned integer
+	if newOffset+length > len(src) {
+		return 0, offset, ErrShortBuffer
+	}
+
+	switch length {
+	case 1:
+		value = uint64(src[newOffset])
+	case 2:
+		value = uint64(binary.BigEndian.Uint16(src[newOffset:]))
+	case 4:
+		value = uint64(binary.BigEndian.Uint32(src[newOffset:]))
+	case 8:
+		value = binary.BigEndian.Uint64(src[newOffset:])
+	default:
+		return 0, offset, fmt.Errorf("unsupported uint length: %d", length)
+	}
+
+	newOffset += length
+	return
 }
 
 // ReadNil reads a nil value from src starting at offset.

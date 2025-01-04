@@ -19,7 +19,7 @@ func Example() {
 	b = AppendBool(b, true)
 
 	b = AppendString(b, "b")
-	b = AppendInt(b, 123)
+	b = AppendInt(b, -123)
 
 	// b = AppendString(b, "c")
 	// b = AppendFloat64(b, 456.789)
@@ -39,7 +39,7 @@ func Example() {
 	fmt.Println(r.Read())
 	v, _ := r.Read()
 
-	fmt.Println(v.Int())
+	fmt.Println(v)
 	// fmt.Println(r.Read())
 	// fmt.Println(r.Read())
 
