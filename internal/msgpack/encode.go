@@ -12,11 +12,9 @@ func AppendArray(dst []byte, n int) []byte {
 	case n <= 15:
 		return append(dst, 0x90|byte(n))
 	case n <= 0xFFFF:
-		dst = append(dst, 0xdc)
-		return append(dst, byte(n>>8), byte(n))
+		return append(dst, 0xdc, byte(n>>8), byte(n))
 	default:
-		dst = append(dst, 0xdd)
-		return append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+		return append(dst, 0xdd, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 	}
 }
 
@@ -25,11 +23,9 @@ func AppendMap(dst []byte, n int) []byte {
 	case n <= 15:
 		return append(dst, 0x80|byte(n))
 	case n <= 0xFFFF:
-		dst = append(dst, 0xde)
-		return append(dst, byte(n>>8), byte(n))
+		return append(dst, 0xde, byte(n>>8), byte(n))
 	default:
-		dst = append(dst, 0xdf)
-		return append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+		return append(dst, 0xdf, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 	}
 }
 
@@ -85,20 +81,16 @@ func AppendInt(dst []byte, i int64) []byte {
 		return append(dst, 0xe0|byte(i+32))
 	case i >= -128:
 		// int8
-		dst = append(dst, 0xd0)
-		return append(dst, byte(i))
+		return append(dst, 0xd0, byte(i))
 	case i >= -32768:
 		// int16
-		dst = append(dst, 0xd1)
-		return append(dst, byte(i>>8), byte(i))
+		return append(dst, 0xd1, byte(i>>8), byte(i))
 	case i >= -2147483648:
 		// int32
-		dst = append(dst, 0xd2)
-		return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+		return append(dst, 0xd2, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	default:
 		// int64
-		dst = append(dst, 0xd3)
-		return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
+		return append(dst, 0xd3, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
 			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	}
 }
@@ -110,20 +102,16 @@ func AppendUint(dst []byte, i uint64) []byte {
 		return append(dst, byte(i))
 	case i <= 255:
 		// uint8
-		dst = append(dst, 0xcc)
-		return append(dst, byte(i))
+		return append(dst, 0xcc, byte(i))
 	case i <= 65535:
 		// uint16
-		dst = append(dst, 0xcd)
-		return append(dst, byte(i>>8), byte(i))
+		return append(dst, 0xcd, byte(i>>8), byte(i))
 	case i <= 4294967295:
 		// uint32
-		dst = append(dst, 0xce)
-		return append(dst, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+		return append(dst, 0xce, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	default:
 		// uint64
-		dst = append(dst, 0xcf)
-		return append(dst, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
+		return append(dst, 0xcf, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
 			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	}
 }
@@ -180,14 +168,12 @@ func AppendUnknownBinary(dst []byte, fn func(dst []byte) []byte) []byte {
 
 func AppendFloat32(dst []byte, f float32) []byte {
 	bits := math.Float32bits(f)
-	dst = append(dst, 0xca)
-	return append(dst, byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
+	return append(dst, 0xca, byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
 }
 
 func AppendFloat64(dst []byte, f float64) []byte {
 	bits := math.Float64bits(f)
-	dst = append(dst, 0xcb)
-	return append(dst,
+	return append(dst, 0xcb,
 		byte(bits>>56), byte(bits>>48), byte(bits>>40), byte(bits>>32),
 		byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
 }
@@ -197,26 +183,24 @@ func AppendTimestamp(dst []byte, t time.Time) []byte {
 }
 
 func AppendExtendedTimestamp(dst []byte, t time.Time) []byte {
-	// Append the fixext8 header and type
-	dst = append(dst, 0xd7, 0x00)
+	s, ns := uint32(t.Unix()), uint32(t.Nanosecond())
 
-	// Append the seconds as a 32-bit big-endian integer
-	seconds := uint32(t.Unix())
-	dst = append(dst,
-		byte(seconds>>24),
-		byte(seconds>>16),
-		byte(seconds>>8),
-		byte(seconds),
+	return append(dst,
+
+		// Append the fixext8 header and type
+		0xd7,
+		0x00,
+
+		// Append the seconds as a 32-bit big-endian integer
+		byte(s>>24),
+		byte(s>>16),
+		byte(s>>8),
+		byte(s),
+
+		// Append the nanoseconds as a 32-bit big-endian integer
+		byte(ns>>24),
+		byte(ns>>16),
+		byte(ns>>8),
+		byte(ns),
 	)
-
-	// Append the nanoseconds as a 32-bit big-endian integer
-	nanoseconds := uint32(t.Nanosecond())
-	dst = append(dst,
-		byte(nanoseconds>>24),
-		byte(nanoseconds>>16),
-		byte(nanoseconds>>8),
-		byte(nanoseconds),
-	)
-
-	return dst
 }
