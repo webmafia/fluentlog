@@ -71,22 +71,31 @@ func AppendBinaryAppender(dst []byte, s internal.BinaryAppender) []byte {
 	})
 }
 
-// AppendBinaryUnknownLength appends a binary object with an unknown length to `dst`.
-// The binary data is appended using the provided function `fn`. Returns the updated byte slice.
+// AppendBinaryUnknownLength appends a MessagePack binary header and binary data to the destination byte slice
+// when the length of the binary data is unknown. It reserves space for the header, appends the data using the provided
+// function `fn`, and updates the header with the actual length of the data.
 func AppendBinaryUnknownLength(dst []byte, fn func(dst []byte) []byte) []byte {
-	// We don't know the length of the binary, so assume the longest possible binary.
+	// Reserve space for the header, assuming the shortest possible binary type initially.
 	start := len(dst)
-	dst = append(dst, 0xc6, 0, 0, 0, 0)
+	dst = append(dst, 0xc4, 0) // Placeholder for bin8 header
+
 	sizeFrom := len(dst)
 	dst = fn(dst)
 	sizeTo := len(dst)
 	l := sizeTo - sizeFrom
 
-	// Now we know how many bytes were appended - update the header accordingly.
-	dst[start+1] = byte(l >> 24)
-	dst[start+2] = byte(l >> 16)
-	dst[start+3] = byte(l >> 8)
-	dst[start+4] = byte(l)
+	// Update the header based on the actual length of the binary data.
+	switch {
+	case l <= 0xFF:
+		dst[start] = 0xc4
+		dst[start+1] = byte(l)
+	case l <= 0xFFFF:
+		dst[start] = 0xc5
+		dst = append(dst[:start+1], append([]byte{byte(l >> 8), byte(l)}, dst[start+2:]...)...)
+	default:
+		dst[start] = 0xc6
+		dst = append(dst[:start+1], append([]byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}, dst[start+2:]...)...)
+	}
 
 	return dst
 }
