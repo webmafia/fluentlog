@@ -104,7 +104,7 @@ func init() {
 		isLengthValue[i] = true
 	}
 	for i := 0x80; i <= 0x8f; i++ { // FixMap
-		lengthLookup[i] = byte((i - 0x80)) // Number of key-value pairs
+		lengthLookup[i] = byte(i - 0x80) // Number of key-value pairs
 		isLengthValue[i] = true
 	}
 	for i := 0x90; i <= 0x9f; i++ { // FixArray
