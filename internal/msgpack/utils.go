@@ -2,6 +2,7 @@ package msgpack
 
 import (
 	"encoding/binary"
+	"math"
 )
 
 type Signed interface {
@@ -10,6 +11,10 @@ type Signed interface {
 
 type Unsigned interface {
 	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+type Float interface {
+	~float32 | ~float64
 }
 
 type Numeric interface {
@@ -43,6 +48,17 @@ func uintFromBuf[T Unsigned](buf []byte) T {
 		return T(binary.BigEndian.Uint32(buf))
 	case 8:
 		return T(binary.BigEndian.Uint64(buf))
+	default:
+		return 0
+	}
+}
+
+func floatFromBuf[T Float](buf []byte) T {
+	switch len(buf) {
+	case 4:
+		return T(math.Float32frombits(binary.BigEndian.Uint32(buf)))
+	case 8:
+		return T(math.Float64frombits(binary.BigEndian.Uint64(buf)))
 	default:
 		return 0
 	}

@@ -1,8 +1,9 @@
 package msgpack
 
 import (
-	"fmt"
 	"math"
+
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // AppendFloat appends a floating-point value (`f`) as a MessagePack-encoded float32 or float64 to `dst`.
@@ -27,26 +28,32 @@ func ReadFloat(src []byte, offset int) (value float64, newOffset int, err error)
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
 	}
-	switch src[offset] {
-	case 0xca: // float32
-		offset++
-		if offset+3 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		bits := uint32(src[offset])<<24 | uint32(src[offset+1])<<16 | uint32(src[offset+2])<<8 | uint32(src[offset+3])
-		value = float64(math.Float32frombits(bits))
-		offset += 4
-	case 0xcb: // float64
-		offset++
-		if offset+7 >= len(src) {
-			return 0, offset, ErrShortBuffer
-		}
-		bits := uint64(src[offset])<<56 | uint64(src[offset+1])<<48 | uint64(src[offset+2])<<40 | uint64(src[offset+3])<<32 |
-			uint64(src[offset+4])<<24 | uint64(src[offset+5])<<16 | uint64(src[offset+6])<<8 | uint64(src[offset+7])
-		value = math.Float64frombits(bits)
-		offset += 8
-	default:
-		return 0, offset, fmt.Errorf("expected float32 (0xca) or float64 (0xcb), got 0x%02x", src[offset])
+
+	typ, length, isValueLength := types.Get(src[offset])
+
+	if typ != types.Float {
+		err = expectedType(src[offset], types.Float)
+		return
 	}
+
+	offset++
+
+	if !isValueLength {
+		if offset+length > len(src) {
+			return 0, offset, ErrShortBuffer
+		}
+
+		l := length
+		length = intFromBuf[int](src[offset : offset+l])
+		offset += l
+	}
+
+	if offset+length > len(src) {
+		return 0, offset, ErrShortBuffer
+	}
+
+	value = floatFromBuf[float64](src[offset : offset+length])
+	offset += length
+
 	return value, offset, nil
 }
