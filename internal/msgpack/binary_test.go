@@ -78,7 +78,7 @@ func TestAppendBinaryAppender(t *testing.T) {
 		mockAppender := &mockBinaryAppender{
 			data: []byte{0x01, 0x02, 0x03},
 		}
-		expected := AppendBinary(nil, mockAppender.data)
+		expected := []byte{0xc6, 0, 0, 0, 3, 0x01, 0x02, 0x03}
 		result := AppendBinaryAppender(nil, mockAppender)
 
 		if !bytes.Equal(result, expected) {
@@ -93,7 +93,7 @@ func TestAppendBinaryUnknownLength(t *testing.T) {
 		fn := func(dst []byte) []byte {
 			return append(dst, data...)
 		}
-		expected := AppendBinary(nil, data)
+		expected := []byte{0xc6, 0, 0, 0, 3, 0x01, 0x02, 0x03}
 		result := AppendBinaryUnknownLength(nil, fn)
 
 		if !bytes.Equal(result, expected) {

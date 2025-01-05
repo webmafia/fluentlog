@@ -33,6 +33,10 @@ func ReadArrayHeader(src []byte, offset int) (length int, newOffset int, err err
 	offset++
 
 	if !isValueLength {
+		if offset+length > len(src) {
+			return 0, offset, ErrShortBuffer
+		}
+
 		l := length
 		length = intFromBuf[int](src[offset : offset+l])
 		offset += l
