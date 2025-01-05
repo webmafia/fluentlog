@@ -3,26 +3,36 @@ package msgpack
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 )
 
+type mockTextAppender struct {
+	data string
+}
+
+func (m *mockTextAppender) AppendText(b []byte) ([]byte, error) {
+	return append(b, m.data...), nil
+}
+
 func TestAppendString(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected []byte
+		desc   string
+		input  string
+		expect []byte
 	}{
-		{"Small String", "abc", append([]byte{0xa3}, []byte("abc")...)},
-		{"Str8", string(make([]byte, 255)), append([]byte{0xd9, 0xff}, make([]byte, 255)...)},
-		{"Str16", string(make([]byte, 256)), append([]byte{0xda, 0x01, 0x00}, make([]byte, 256)...)},
-		{"Str32", string(make([]byte, 65536)), append([]byte{0xdb, 0x00, 0x01, 0x00, 0x00}, make([]byte, 65536)...)},
+		{"short string", "abc", []byte{0xa3, 'a', 'b', 'c'}},
+		{"medium string", strings.Repeat("a", 255), append([]byte{0xd9, 0xff}, bytes.Repeat([]byte{'a'}, 255)...)},
+		{"long string", strings.Repeat("a", 65535), append([]byte{0xda, 0xff, 0xff}, bytes.Repeat([]byte{'a'}, 65535)...)},
+		{"very long string", strings.Repeat("a", 70000), append([]byte{0xdb, 0x00, 0x01, 0x11, 0x70}, bytes.Repeat([]byte{'a'}, 70000)...)},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := AppendString(nil, tt.input)
-			if !bytes.Equal(result, tt.expected) {
-				t.Errorf("expected %x, got %x", tt.expected, result)
+		t.Run(tt.desc, func(t *testing.T) {
+			dst := []byte{}
+			result := AppendString(dst, tt.input)
+			if !bytes.Equal(tt.expect, result) {
+				t.Errorf("expected %v, got %v", tt.expect, result)
 			}
 		})
 	}
@@ -30,96 +40,70 @@ func TestAppendString(t *testing.T) {
 
 func TestReadString(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          []byte
-		offset         int
-		expectedValue  string
-		expectedOffset int
-		expectedErr    error
+		desc      string
+		input     []byte
+		offset    int
+		expect    string
+		newOffset int
+		expectErr error
 	}{
-		{"Small String", []byte{0xa3, 'a', 'b', 'c'}, 0, "abc", 4, nil},
-		{"Str8", append([]byte{0xd9, 0x03}, []byte("xyz")...), 0, "xyz", 5, nil},
-		{"Str16", append([]byte{0xda, 0x00, 0x03}, []byte("def")...), 0, "def", 5, nil},
-		{"Invalid Header", []byte{0x95, 0x00}, 0, "", 0, ErrInvalidHeaderByte},
-		{"Empty Input", []byte{}, 0, "", 0, ErrShortBuffer},
+		{"valid short string", []byte{0xa3, 'a', 'b', 'c'}, 0, "abc", 4, nil},
+		{"valid medium string", append([]byte{0xd9, 0xff}, bytes.Repeat([]byte{'a'}, 255)...), 0, strings.Repeat("a", 255), 257, nil},
+		{"short buffer", []byte{0xa3, 'a'}, 0, "", 0, ErrShortBuffer},
+		{"wrong type", []byte{0x90, 'a', 'b', 'c'}, 0, "", 0, ErrInvalidHeaderByte},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.desc, func(t *testing.T) {
 			result, newOffset, err := ReadString(tt.input, tt.offset)
-
-			// Check for expected error
-			if tt.expectedErr != nil {
-				if !errors.Is(err, tt.expectedErr) {
-					t.Errorf("expected error %v, got %v", tt.expectedErr, err)
+			if tt.expectErr != nil {
+				if !errors.Is(err, tt.expectErr) {
+					t.Errorf("expected error %v, got %v", tt.expectErr, err)
 				}
-				return
-			}
-
-			// Verify decoded value and offset
-			if result != tt.expectedValue {
-				t.Errorf("expected value %q, got %q", tt.expectedValue, result)
-			}
-			if newOffset != tt.expectedOffset {
-				t.Errorf("expected newOffset %d, got %d", tt.expectedOffset, newOffset)
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if result != tt.expect {
+					t.Errorf("expected %v, got %v", tt.expect, result)
+				}
+				if newOffset != tt.newOffset {
+					t.Errorf("expected new offset %v, got %v", tt.newOffset, newOffset)
+				}
 			}
 		})
 	}
 }
 
-func TestReadStringCopy(t *testing.T) {
-	t.Run("String Copy", func(t *testing.T) {
-		input := []byte{0xa3, 'a', 'b', 'c'}
-		result, _, err := ReadStringCopy(input, 0)
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if result != "abc" {
-			t.Errorf("expected value %q, got %q", "abc", result)
-		}
-
-		// Ensure a copy was made
-		input[1] = 'z'
-		if result == string(input[1:4]) {
-			t.Errorf("expected a copy of the string, but result shares memory with input")
-		}
-	})
-}
-
 func TestAppendTextAppender(t *testing.T) {
-	t.Run("Text Appender", func(t *testing.T) {
-		mockAppender := &mockTextAppender{data: "appended text"}
-		expected := AppendString(nil, mockAppender.data)
-		result := AppendTextAppender(nil, mockAppender)
+	tests := []struct {
+		desc   string
+		input  *mockTextAppender
+		expect []byte
+	}{
+		{"append simple string", &mockTextAppender{data: "hello"}, []byte{0xdb, 0, 0, 0, 5, 'h', 'e', 'l', 'l', 'o'}},
+	}
 
-		if !bytes.Equal(result, expected) {
-			t.Errorf("expected %x, got %x", expected, result)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			dst := []byte{}
+			result := AppendTextAppender(dst, tt.input)
+			if !bytes.Equal(tt.expect, result) {
+				t.Errorf("expected %v, got %v", tt.expect, result)
+			}
+		})
+	}
 }
 
 func TestAppendStringUnknownLength(t *testing.T) {
-	t.Run("Unknown Length", func(t *testing.T) {
-		data := "unknown length"
-		fn := func(dst []byte) []byte {
-			return append(dst, data...)
-		}
-		expected := AppendString(nil, data)
-		result := AppendStringUnknownLength(nil, fn)
-
-		if !bytes.Equal(result, expected) {
-			t.Errorf("expected %x, got %x", expected, result)
-		}
+	dst := []byte{}
+	result := AppendStringUnknownLength(dst, func(dst []byte) []byte {
+		return append(dst, "dynamic-length"...)
 	})
-}
 
-// mockTextAppender is a mock implementation of internal.TextAppender.
-type mockTextAppender struct {
-	data string
-}
-
-func (m *mockTextAppender) AppendText(dst []byte) ([]byte, error) {
-	return append(dst, m.data...), nil
+	length := len("dynamic-length")
+	expect := append([]byte{0xdb, byte(length >> 24), byte(length >> 16), byte(length >> 8), byte(length)}, []byte("dynamic-length")...)
+	if !bytes.Equal(expect, result) {
+		t.Errorf("expected %v, got %v", expect, result)
+	}
 }

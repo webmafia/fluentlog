@@ -1,6 +1,8 @@
 package msgpack
 
 import (
+	"fmt"
+	"math"
 	"strings"
 
 	"github.com/webmafia/fast"
@@ -29,6 +31,11 @@ func AppendString(dst []byte, s string) []byte {
 // Returns a zero-copy reference to the string from the `src` slice, the new offset,
 // and an error if the data is invalid or incomplete.
 func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
+	if offset >= len(src) {
+		err = ErrShortBuffer
+		return
+	}
+
 	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Str {
@@ -40,8 +47,24 @@ func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
 
 	if !isValueLength {
 		l := length
-		length = intFromBuf[int](src[offset : offset+l])
+		if offset+l > len(src) {
+			err = ErrShortBuffer
+			return
+		}
+
+		// Read the length as an unsigned integer to prevent negative lengths
+		uintLength := uintFromBuf[uint](src[offset : offset+l])
+		if uintLength > math.MaxInt {
+			err = fmt.Errorf("string length %d exceeds max int", uintLength)
+			return
+		}
+		length = int(uintLength)
 		offset += l
+	}
+
+	if offset+length > len(src) {
+		err = ErrShortBuffer
+		return
 	}
 
 	s = fast.BytesToString(src[offset : offset+length])
