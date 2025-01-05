@@ -1,6 +1,8 @@
 package msgpack
 
-import "fmt"
+import (
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
+)
 
 // AppendBool appends a boolean value (`true` or `false`) as a MessagePack-encoded boolean to `dst`.
 // Returns the updated byte slice.
@@ -24,7 +26,7 @@ func ReadBool(src []byte, offset int) (value bool, newOffset int, err error) {
 	} else if b == 0xc3 {
 		value = true
 	} else {
-		return false, offset, fmt.Errorf("invalid bool header byte: 0x%02x", b)
+		return false, offset, expectedType(b, types.Bool)
 	}
 	return value, offset, nil
 }

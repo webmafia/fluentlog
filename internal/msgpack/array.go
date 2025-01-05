@@ -18,6 +18,11 @@ func AppendArrayHeader(dst []byte, n int) []byte {
 // ReadArrayHeader reads a MessagePack array header from `src` starting at `offset`.
 // Returns the array length, the new offset, and an error if the header is invalid.
 func ReadArrayHeader(src []byte, offset int) (length int, newOffset int, err error) {
+	if offset >= len(src) {
+		err = ErrShortBuffer
+		return
+	}
+
 	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Array {

@@ -18,6 +18,11 @@ func AppendMapHeader(dst []byte, n int) []byte {
 // ReadMapHeader reads a map header from `src` starting at `offset`.
 // Returns the number of key-value pairs, the new offset, and an error if the header is invalid.
 func ReadMapHeader(src []byte, offset int) (length int, newOffset int, err error) {
+	if offset >= len(src) {
+		err = ErrShortBuffer
+		return
+	}
+
 	typ, length, isValueLength := types.Get(src[offset])
 
 	if typ != types.Map {

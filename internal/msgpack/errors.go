@@ -12,9 +12,10 @@ var (
 	// ErrShortBuffer is returned when the byte slice is too short to read the expected data.
 	ErrShortBuffer = io.ErrShortBuffer
 	// ErrInvalidFormat is returned when the data does not conform to the expected MessagePack format.
-	ErrInvalidFormat = errors.New("invalid MessagePack format")
+	ErrInvalidFormat     = errors.New("invalid MessagePack format")
+	ErrInvalidHeaderByte = errors.New("invalid header byte")
 )
 
 func expectedType(c byte, expected types.Type) (err error) {
-	return fmt.Errorf("invalid %s header byte: 0x%02x", expected, c)
+	return fmt.Errorf("%w: expected %s, got 0x%02x", ErrInvalidHeaderByte, expected, c)
 }

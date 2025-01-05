@@ -1,9 +1,8 @@
 package msgpack
 
 import (
-	"fmt"
-
 	"github.com/webmafia/fluentlog/internal"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // AppendBinary appends a MessagePack binary header and the binary `data` to `dst`.
@@ -53,7 +52,7 @@ func ReadBinary(src []byte, offset int) (data []byte, newOffset int, err error) 
 		length = int(src[offset])<<24 | int(src[offset+1])<<16 | int(src[offset+2])<<8 | int(src[offset+3])
 		offset += 4
 	default:
-		return nil, offset, fmt.Errorf("invalid binary header byte: 0x%02x", b)
+		return nil, offset, expectedType(b, types.Bin)
 	}
 	if offset+length > len(src) {
 		return nil, offset, ErrShortBuffer
