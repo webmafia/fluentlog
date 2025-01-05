@@ -1,41 +1,16 @@
+// integer.go
 package msgpack
 
 import (
-	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
-// AppendInt appends the integer `i` as a MessagePack-encoded value to `dst`.
-// Returns the updated byte slice.
-func AppendInt(dst []byte, i int64) []byte {
-	if i >= 0 {
-		return AppendUint(dst, uint64(i))
-	}
-
-	switch {
-	case i >= -32:
-		// Negative fixint
-		return append(dst, 0xe0|byte(i+32))
-	case i >= -128:
-		// int8
-		return append(dst, 0xd0, byte(i))
-	case i >= -32768:
-		// int16
-		return append(dst, 0xd1, byte(i>>8), byte(i))
-	case i >= -2147483648:
-		// int32
-		return append(dst, 0xd2, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-	default:
-		// int64
-		return append(dst, 0xd3, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
-			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-	}
-}
-
 // ReadInt reads a MessagePack-encoded integer from `src` starting at `offset`.
-// Returns the integer value, the new offset, and an error if the data is invalid or incomplete.
+// It handles both signed (TypeInt) and unsigned (TypeUint) integers.
+// Returns the integer value as int64, the new offset, and an error if the data is invalid or incomplete.
 func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
@@ -45,65 +20,57 @@ func ReadInt(src []byte, offset int) (value int64, newOffset int, err error) {
 	typ, length, isValueLength := types.Get(c)
 	newOffset = offset + 1
 
-	if typ != types.Int {
-		return 0, offset, fmt.Errorf("invalid int header byte: 0x%02x", c)
-	}
-
-	if isValueLength && length == 0 {
-		// Directly extract FixInt value
-		if c >= 0xe0 { // Negative FixInt
-			return int64(int8(c)), newOffset, nil
+	switch typ {
+	case types.Int:
+		if isValueLength && length == 0 {
+			// Handle Negative FixInt (0xe0 to 0xff)
+			if c >= 0xe0 {
+				// Negative FixInt: single byte
+				return intFromBuf[int64]([]byte{c}), newOffset, nil
+			}
+			// Unexpected: TypeInt with non-negative FixInt range
+			return 0, offset, fmt.Errorf("unexpected TypeInt for non-negative fixint: 0x%02x", c)
 		}
-		return int64(c), newOffset, nil // Positive FixInt
-	}
+		// Handle multi-byte signed integers
+		if newOffset+length > len(src) {
+			return 0, offset, ErrShortBuffer
+		}
+		buf := src[newOffset : newOffset+length]
+		value = intFromBuf[int64](buf)
+		newOffset += length
+		return value, newOffset, nil
 
-	// Extract multi-byte integer
-	if newOffset+length > len(src) {
-		return 0, offset, ErrShortBuffer
-	}
+	case types.Uint:
+		if isValueLength && length == 0 {
+			// Handle Positive FixInt (0x00 to 0x7f)
+			if c <= 0x7f {
+				// Positive FixInt: single byte
+				return intFromBuf[int64](src[offset : offset+1]), newOffset, nil
+			}
+			// Unexpected: TypeUint with non-positive FixInt range
+			return 0, offset, fmt.Errorf("unexpected TypeUint for non-positive fixint: 0x%02x", c)
+		}
+		// Handle multi-byte unsigned integers
+		if newOffset+length > len(src) {
+			return 0, offset, ErrShortBuffer
+		}
+		buf := src[newOffset : newOffset+length]
+		uintVal := uintFromBuf[uint64](buf)
+		newOffset += length
+		if uintVal > math.MaxInt64 {
+			return 0, offset, fmt.Errorf("uint64 value %d overflows int64", uintVal)
+		}
+		value = int64(uintVal)
+		return value, newOffset, nil
 
-	switch length {
-	case 1:
-		value = int64(int8(src[newOffset]))
-	case 2:
-		value = int64(int16(binary.BigEndian.Uint16(src[newOffset:])))
-	case 4:
-		value = int64(int32(binary.BigEndian.Uint32(src[newOffset:])))
-	case 8:
-		value = int64(binary.BigEndian.Uint64(src[newOffset:]))
 	default:
-		return 0, offset, fmt.Errorf("unsupported int length: %d", length)
-	}
-
-	newOffset += length
-	return
-}
-
-// AppendUint appends the unsigned integer `i` as a MessagePack-encoded value to `dst`.
-// Returns the updated byte slice.
-func AppendUint(dst []byte, i uint64) []byte {
-	switch {
-	case i <= 127:
-		// Positive fixint
-		return append(dst, byte(i))
-	case i <= 255:
-		// uint8
-		return append(dst, 0xcc, byte(i))
-	case i <= 65535:
-		// uint16
-		return append(dst, 0xcd, byte(i>>8), byte(i))
-	case i <= 4294967295:
-		// uint32
-		return append(dst, 0xce, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-	default:
-		// uint64
-		return append(dst, 0xcf, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32),
-			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+		return 0, offset, fmt.Errorf("invalid int header byte: 0x%02x", c)
 	}
 }
 
 // ReadUint reads a MessagePack-encoded unsigned integer from `src` starting at `offset`.
-// Returns the unsigned integer value, the new offset, and an error if the data is invalid or incomplete.
+// It only accepts TypeUint and returns an error for any other type.
+// Returns the unsigned integer value as uint64, the new offset, and an error if the data is invalid or incomplete.
 func ReadUint(src []byte, offset int) (value uint64, newOffset int, err error) {
 	if offset >= len(src) {
 		return 0, offset, ErrShortBuffer
@@ -113,36 +80,127 @@ func ReadUint(src []byte, offset int) (value uint64, newOffset int, err error) {
 	typ, length, isValueLength := types.Get(c)
 	newOffset = offset + 1
 
-	if typ != types.Uint && typ != types.Int {
+	if typ != types.Uint {
 		return 0, offset, fmt.Errorf("invalid uint header byte: 0x%02x", c)
 	}
 
 	if isValueLength && length == 0 {
-		// Directly extract FixInt value
-		if c <= 0x7f { // Positive FixInt
-			return uint64(c), newOffset, nil
+		// Handle Positive FixInt (0x00 to 0x7f)
+		if c <= 0x7f {
+			// Positive FixInt: single byte
+			return uintFromBuf[uint64](src[offset : offset+1]), newOffset, nil
 		}
-		return 0, offset, fmt.Errorf("negative value cannot be read as uint")
+		// Unexpected: TypeUint with non-positive FixInt range
+		return 0, offset, fmt.Errorf("unexpected TypeUint for non-positive fixint: 0x%02x", c)
 	}
 
-	// Extract multi-byte unsigned integer
+	// Handle multi-byte unsigned integers
 	if newOffset+length > len(src) {
 		return 0, offset, ErrShortBuffer
 	}
 
-	switch length {
-	case 1:
-		value = uint64(src[newOffset])
-	case 2:
-		value = uint64(binary.BigEndian.Uint16(src[newOffset:]))
-	case 4:
-		value = uint64(binary.BigEndian.Uint32(src[newOffset:]))
-	case 8:
-		value = binary.BigEndian.Uint64(src[newOffset:])
-	default:
-		return 0, offset, fmt.Errorf("unsupported uint length: %d", length)
+	buf := src[newOffset : newOffset+length]
+	value = uintFromBuf[uint64](buf)
+	newOffset += length
+	return value, newOffset, nil
+}
+
+// AppendInt appends a MessagePack-encoded integer to the buffer.
+// Positive integers are encoded as TypeUint, and negative integers as TypeInt.
+// It uses the most compact representation based on the value.
+func AppendInt(buf []byte, value int64) []byte {
+	if value >= 0 {
+		// Encode positive integers as TypeUint
+		return AppendUint(buf, uint64(value))
 	}
 
-	newOffset += length
-	return
+	// Encode negative integers as TypeInt
+	switch {
+	case value >= -32:
+		// Negative FixInt: single byte
+		return append(buf, byte(value))
+	case value >= -128:
+		// int8
+		buf = append(buf, 0xd0)
+		buf = append(buf, byte(value))
+		return buf
+	case value >= -32768:
+		// int16
+		buf = append(buf, 0xd1)
+		// Manually encode without using make()
+		b0 := byte(value >> 8)
+		b1 := byte(value)
+		buf = append(buf, b0, b1)
+		return buf
+	case value >= -2147483648:
+		// int32
+		buf = append(buf, 0xd2)
+		// Manually encode without using make()
+		b0 := byte(value >> 24)
+		b1 := byte(value >> 16)
+		b2 := byte(value >> 8)
+		b3 := byte(value)
+		buf = append(buf, b0, b1, b2, b3)
+		return buf
+	default:
+		// int64
+		buf = append(buf, 0xd3)
+		// Manually encode without using make()
+		b0 := byte(value >> 56)
+		b1 := byte(value >> 48)
+		b2 := byte(value >> 40)
+		b3 := byte(value >> 32)
+		b4 := byte(value >> 24)
+		b5 := byte(value >> 16)
+		b6 := byte(value >> 8)
+		b7 := byte(value)
+		buf = append(buf, b0, b1, b2, b3, b4, b5, b6, b7)
+		return buf
+	}
+}
+
+// AppendUint appends a MessagePack-encoded unsigned integer to the buffer.
+// It uses the most compact representation based on the value.
+func AppendUint(buf []byte, value uint64) []byte {
+	switch {
+	case value <= 127:
+		// Positive FixInt: single byte
+		return append(buf, byte(value))
+	case value <= 255:
+		// uint8
+		buf = append(buf, 0xcc)
+		return append(buf, byte(value))
+	case value <= 65535:
+		// uint16
+		buf = append(buf, 0xcd)
+		// Manually encode without using make()
+		b0 := byte(value >> 8)
+		b1 := byte(value)
+		buf = append(buf, b0, b1)
+		return buf
+	case value <= 4294967295:
+		// uint32
+		buf = append(buf, 0xce)
+		// Manually encode without using make()
+		b0 := byte(value >> 24)
+		b1 := byte(value >> 16)
+		b2 := byte(value >> 8)
+		b3 := byte(value)
+		buf = append(buf, b0, b1, b2, b3)
+		return buf
+	default:
+		// uint64
+		buf = append(buf, 0xcf)
+		// Manually encode without using make()
+		b0 := byte(value >> 56)
+		b1 := byte(value >> 48)
+		b2 := byte(value >> 40)
+		b3 := byte(value >> 32)
+		b4 := byte(value >> 24)
+		b5 := byte(value >> 16)
+		b6 := byte(value >> 8)
+		b7 := byte(value)
+		buf = append(buf, b0, b1, b2, b3, b4, b5, b6, b7)
+		return buf
+	}
 }
