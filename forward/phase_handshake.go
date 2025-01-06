@@ -6,9 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"strings"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 const (
@@ -39,30 +40,34 @@ func (s *ServerConn) writeHelo() (nonce [16]byte, err error) {
 }
 
 func (c *Client) readHelo() (nonce []byte, err error) {
-	arrLen, err := c.r.ReadArrayHeader()
+	arr, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if arrLen != 2 {
+	if t := arr.Type(); t != types.Array || arr.Len() != 2 {
 		return nil, ErrInvalidHelo
 	}
 
-	typ, err := c.r.ReadString()
+	helo, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if typ != HELO {
+	if helo.Str() != HELO {
 		return nil, ErrInvalidHelo
 	}
 
-	mapLen, err := c.r.ReadMapHeader()
+	m, err := c.r.Read()
 
 	if err != nil {
 		return
+	}
+
+	if m.Type() != types.Map {
+		return nil, ErrInvalidHelo
 	}
 
 	var (
@@ -71,20 +76,20 @@ func (c *Client) readHelo() (nonce []byte, err error) {
 		keepAlive = true
 	)
 
-	for range mapLen {
-		if key, err = c.r.ReadString(); err != nil {
+	for range m.Len() {
+		if key, err = c.r.ReadStr(); err != nil {
 			return
 		}
 
 		switch key {
 
 		case "nonce":
-			if nonce, err = c.r.ReadBinary(); err != nil {
+			if nonce, err = c.r.ReadBin(); err != nil {
 				return
 			}
 
 		case "auth":
-			if authSalt, err = c.r.ReadBinary(); err != nil {
+			if authSalt, err = c.r.ReadBin(); err != nil {
 				return
 			}
 
@@ -135,49 +140,53 @@ func (c *Client) writePing(nonce []byte) (salt [16]byte, err error) {
 }
 
 func (s *ServerConn) readPing(nonce []byte) (salt []byte, sharedKey []byte, err error) {
-	arrLen, err := s.r.ReadArrayHeader()
+	arr, err := s.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if arrLen != 6 {
+	if arr.Type() != types.Array || arr.Len() != 6 {
 		return nil, nil, ErrInvalidPing
 	}
 
-	typ, err := s.r.ReadString()
+	typ, err := s.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if typ != PING {
+	if typ.Str() != PING {
 		return nil, nil, ErrInvalidPing
 	}
 
-	clientHostname, err := s.r.ReadString()
+	var (
+		clientHostname string
+		digest         string
+		saltStr        string
+	)
 
-	if err != nil {
+	if clientHostname, err = s.r.ReadStr(); err != nil {
 		return
 	}
 
-	if salt, err = s.r.ReadBinary(); err != nil {
+	if saltStr, err = s.r.ReadStr(); err != nil {
 		return
 	}
 
-	digest, err := s.r.ReadString()
+	salt = fast.StringToBytes(saltStr)
 
-	if err != nil {
+	if digest, err = s.r.ReadStr(); err != nil {
 		return
 	}
 
 	// Skip username
-	if _, err = s.r.ReadString(); err != nil {
+	if _, err = s.r.Read(); err != nil {
 		return
 	}
 
 	// Skip password
-	if _, err = s.r.ReadString(); err != nil {
+	if _, err = s.r.Read(); err != nil {
 		return
 	}
 
@@ -205,65 +214,65 @@ func (s *ServerConn) writePong(nonce []byte, salt []byte, sharedKey []byte, auth
 }
 
 func (c *Client) readPong(nonce []byte, salt [16]byte) (err error) {
-	arrLen, err := c.r.ReadArrayHeader()
+	arr, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if arrLen != 5 {
+	if arr.Type() != types.Array || arr.Len() != 5 {
 		return ErrInvalidPong
 	}
 
-	typ, err := c.r.ReadString()
+	typ, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if typ != PONG {
+	if typ.Str() != PONG {
 		return ErrInvalidPong
 	}
 
-	authResult, err := c.r.ReadBool()
+	authResult, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	reason, err := c.r.ReadString()
+	reason, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	serverHostname, err := c.r.ReadString()
+	serverHostname, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	digest, err := c.r.ReadString()
+	digest, err := c.r.Read()
 
 	if err != nil {
 		return
 	}
 
-	if !authResult {
-		if reason != "" {
+	if !authResult.Bool() {
+		if !reason.IsZero() {
 			return fmt.Errorf("%w - reason: %s", ErrFailedAuth, reason)
 		}
 
 		return ErrFailedAuth
 	}
 
-	correctDigest := sharedKeyDigest(salt[:], serverHostname, nonce, c.opt.SharedKey)
+	correctDigest := sharedKeyDigest(salt[:], serverHostname.Str(), nonce, c.opt.SharedKey)
 
-	if !internal.SameString(digest, correctDigest) {
+	if !internal.SameString(digest.Str(), correctDigest) {
 		return ErrFailedAuth
 	}
 
-	c.serverHostname = strings.Clone(serverHostname)
+	c.serverHostname = serverHostname.StrCopy()
 	return
 }
 

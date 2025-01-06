@@ -20,12 +20,28 @@ var (
 
 type Value []byte
 
+func (v Value) IsZero() bool {
+	return len(v) == 0
+}
+
 func (v Value) Type() (t types.Type) {
 	if len(v) == 0 {
 		return types.Nil
 	}
 
 	t, _, _ = types.Get(v[0])
+	return
+}
+
+func (v Value) expectType(t types.Type) (err error) {
+	if len(v) == 0 {
+		return ErrShortBuffer
+	}
+
+	if t2, _, _ := types.Get(v[0]); t2 != t {
+		err = fmt.Errorf("%w: expected %s, got %s", ErrInvalidHeaderByte, t, t2)
+	}
+
 	return
 }
 

@@ -20,8 +20,9 @@ func NewWriter(w io.Writer, buf *buffer.Buffer) Writer {
 	}
 }
 
-func (w Writer) Reset() {
+func (w *Writer) Reset(writer io.Writer) {
 	w.b.Reset()
+	w.w = writer
 }
 
 func (w Writer) Bytes() []byte {
@@ -29,7 +30,9 @@ func (w Writer) Bytes() []byte {
 }
 
 func (w Writer) Flush() (err error) {
-	_, err = w.w.Write(w.b.B)
+	if w.w != nil {
+		_, err = w.w.Write(w.b.B)
+	}
 
 	if err == nil {
 		w.b.Reset()

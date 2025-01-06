@@ -118,7 +118,7 @@ func BenchmarkReader(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				r.Reset()
 				r.Write(bm.input)
-				r2.Reset()
+				r2.Reset(r)
 				_, _ = r2.Read()
 			}
 		})
@@ -189,4 +189,34 @@ func TestRelease(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkReader2(b *testing.B) {
+	r := bytes.NewReader(nil)
+	var data []byte
+	data = AppendString(data, "foobar")
+
+	buf := buffer.NewBuffer(64)
+
+	b.Run("Read", func(b *testing.B) {
+		r.Reset(data)
+		r2 := NewReader(r, buf, 1024)
+		r2.Reset(r)
+		b.ResetTimer()
+
+		for range b.N {
+			_, _ = r2.Read()
+		}
+	})
+
+	b.Run("ReadStr", func(b *testing.B) {
+		r.Reset(data)
+		r2 := NewReader(r, buf, 1024)
+		r2.Reset(r)
+		b.ResetTimer()
+
+		for range b.N {
+			_, _ = r2.ReadStr()
+		}
+	})
 }

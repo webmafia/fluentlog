@@ -25,8 +25,9 @@ func NewReader(r io.Reader, buf *buffer.Buffer, maxBuf int) Reader {
 	}
 }
 
-func (r *Reader) Reset() {
+func (r *Reader) Reset(reader io.Reader) {
 	r.b.Reset()
+	r.r = reader
 	r.n = 0
 }
 
@@ -48,7 +49,7 @@ func (r *Reader) Read() (v Value, err error) {
 		}
 
 		r.n += length
-		length = intFromBuf[int](r.b.B[pos:r.n])
+		length = int(uintFromBuf[uint](r.b.B[pos:r.n]))
 	}
 
 	if t != types.Array && t != types.Map {
@@ -64,6 +65,90 @@ func (r *Reader) Read() (v Value, err error) {
 	return
 }
 
+func (r *Reader) ReadStr() (s string, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Str); err != nil {
+		return
+	}
+
+	return v.Str(), nil
+}
+
+func (r *Reader) ReadBin() (b []byte, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Bin); err != nil {
+		return
+	}
+
+	return v.Bin(), nil
+}
+
+func (r *Reader) ReadInt() (i int64, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Int); err != nil {
+		return
+	}
+
+	return v.Int(), nil
+}
+
+func (r *Reader) ReadUint() (i uint64, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Uint); err != nil {
+		return
+	}
+
+	return v.Uint(), nil
+}
+
+func (r *Reader) ReadFloat() (f float64, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Float); err != nil {
+		return
+	}
+
+	return v.Float(), nil
+}
+
+func (r *Reader) ReadBool() (b bool, err error) {
+	v, err := r.Read()
+
+	if err != nil {
+		return
+	}
+
+	if err = v.expectType(types.Bool); err != nil {
+		return
+	}
+
+	return v.Bool(), nil
+}
+
 // Ensures that there is at least n bytes of data in buffer
 func (r *Reader) fill(n int) (err error) {
 	l := len(r.b.B)
@@ -77,6 +162,10 @@ func (r *Reader) fill(n int) (err error) {
 }
 
 func (r *Reader) fillFromReader(n int) (err error) {
+	if r.r == nil {
+		return io.EOF
+	}
+
 	readOffset := len(r.b.B) // Start reading from the current end of valid data
 
 	if err = r.grow(n); err != nil {

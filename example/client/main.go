@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/webmafia/fluentlog"
 	"github.com/webmafia/fluentlog/forward"
 )
 
@@ -29,26 +28,18 @@ func startClient(ctx context.Context) (err error) {
 		return
 	}
 
-	// w := cli.Writer()
+	time.Sleep(3 * time.Second)
 
-	// w.WriteArrayHeader(3)
-	// w.WriteString("foo.bar")
-	// w.WriteTimestamp(time.Now())
-	// w.WriteMapHeader(1)
-	// w.WriteString("hello")
-	// w.WriteString("world")
-	// w.Flush()
+	// msg := fluentlog.NewMessage("foo.bar", time.Now())
+	// msg.AddField("foo", 123)
+	// msg.AddField("bar", "baz")
 
-	msg := fluentlog.NewMessage("foo.bar", time.Now())
-	msg.AddField("foo", 123)
-	msg.AddField("bar", "baz")
+	// if err = cli.Send(msg); err != nil {
+	// 	return
+	// }
 
-	if err = cli.Send(msg); err != nil {
-		return
-	}
-
-	log.Println("sent message")
-	time.Sleep(time.Second)
+	// log.Println("sent message")
+	// time.Sleep(time.Second)
 
 	return
 }

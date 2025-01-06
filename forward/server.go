@@ -5,13 +5,13 @@ import (
 	"log"
 	"net"
 
-	"github.com/valyala/bytebufferpool"
+	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
 type Server struct {
 	opt     ServerOptions
-	bufPool bytebufferpool.Pool
+	bufPool buffer.Pool
 }
 
 type ServerOptions struct {
@@ -35,7 +35,7 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, addr string, fn func(*bytebufferpool.ByteBuffer) error) (err error) {
+func (s *Server) Listen(ctx context.Context, addr string, fn func(*buffer.Buffer) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -61,14 +61,20 @@ func (s *Server) Listen(ctx context.Context, addr string, fn func(*bytebufferpoo
 			return err
 		}
 
-		sc := ServerConn{
-			serv: s,
-			conn: conn,
-			r:    msgpack.NewReader(conn, make([]byte, 4096)),
-			w:    msgpack.NewWriter(conn, make([]byte, 4096)),
-		}
-
 		go func() {
+			rBuf := s.bufPool.Get()
+			defer s.bufPool.Put(rBuf)
+
+			wBuf := s.bufPool.Get()
+			defer s.bufPool.Put(wBuf)
+
+			sc := ServerConn{
+				serv: s,
+				conn: conn,
+				r:    msgpack.NewReader(conn, rBuf, 16*1024),
+				w:    msgpack.NewWriter(conn, wBuf),
+			}
+
 			if err := sc.Handle(fn); err != nil {
 				log.Println(err)
 			}

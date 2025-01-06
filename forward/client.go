@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/webmafia/fluentlog"
+	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
@@ -27,8 +27,8 @@ type ClientOptions struct {
 func NewClient(addr string, opt ClientOptions) *Client {
 	return &Client{
 		addr: addr,
-		r:    msgpack.NewReader(nil, make([]byte, 4096)),
-		w:    msgpack.NewWriter(nil, make([]byte, 4096)),
+		r:    msgpack.NewReader(nil, buffer.NewBuffer(4096), 4096),
+		w:    msgpack.NewWriter(nil, buffer.NewBuffer(4096)),
 		opt:  opt,
 	}
 }
@@ -59,17 +59,17 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 	}
 
 	log.Println("connected!")
-	c.r.Release()
+	c.r.Release(0)
 
 	return
 }
 
-func (c *Client) Send(msg fluentlog.Message) (err error) {
-	n, err := msg.WriteTo(c.conn)
+// func (c *Client) Send(msg fluentlog.Message) (err error) {
+// 	n, err := msg.WriteTo(c.conn)
 
-	log.Println("sent", n, "bytes")
-	return
-}
+// 	log.Println("sent", n, "bytes")
+// 	return
+// }
 
 func (c *Client) Writer() msgpack.Writer {
 	return c.w

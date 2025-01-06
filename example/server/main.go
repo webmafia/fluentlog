@@ -6,8 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/valyala/bytebufferpool"
-	"github.com/webmafia/fluentlog"
+	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/forward"
 )
 
@@ -25,16 +24,19 @@ func startServer(ctx context.Context) (err error) {
 		SharedKey: forward.SharedKey([]byte("secret")),
 	})
 
-	// addr := "localhost:24224"
-	addr := "localhost:24284"
+	addr := "localhost:24224"
+	// addr := "localhost:24284"
 
-	return serv.Listen(ctx, addr, func(b *bytebufferpool.ByteBuffer) error {
-		msg := fluentlog.MsgFromBuf(b.B)
-		log.Println(msg.Tag(), msg.Time())
+	return serv.Listen(ctx, addr, func(b *buffer.Buffer) error {
+		log.Println(b.String())
+		log.Println(b.Bytes())
 
-		for k, v := range msg.Fields().Map() {
-			log.Println(k.String(), v.String())
-		}
+		// msg := fluentlog.MsgFromBuf(b.B)
+		// log.Println(msg.Tag(), msg.Time())
+
+		// for k, v := range msg.Fields().Map() {
+		// 	log.Println(k.String(), v.String())
+		// }
 
 		return nil
 	})
