@@ -13,7 +13,7 @@ func ExampleReadTimestamp() {
 	var buf []byte
 
 	t := time.Date(2025, 01, 01, 1, 2, 3, 0, time.UTC)
-	buf = AppendTimestamp(buf, t, TsForwardEventTime)
+	buf = AppendTimestamp(buf, t, TsFluentd)
 
 	fmt.Println(buf)
 

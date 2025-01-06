@@ -11,19 +11,22 @@ import (
 type TsFormat uint8
 
 const (
-	TsAuto             TsFormat = iota
-	Ts32                        // 0xd6: Unix timestamp with seconds precision
-	Ts64                        // 0xd7: Unix timestamp with nanoseconds precision (compact)
-	Ts96                        // 0xc7: Unix timestamp with nanoseconds precision (full)
-	TsInt                       // Unix timestamp with seconds precision as regular integer
-	TsForwardEventTime          // Fluntd Forward EventTime
+	TsAuto    TsFormat = iota // Automatically determine the best timestamp format.
+	Ts32                      // 0xd6: Unix timestamp with seconds precision.
+	Ts64                      // 0xd7: Unix timestamp with nanoseconds precision (compact).
+	Ts96                      // 0xc7: Unix timestamp with nanoseconds precision (full).
+	TsInt                     // Unix timestamp with seconds precision as regular integer.
+	TsFluentd                 // Fluntd Forward EventTime.
 )
 
 const msgpackTimestamp = 0xff
-const forwardEventTime = 0x00
+const fluentdEventTime = 0x00
 
-// AppendEventTime appends a Fluentd Forward EventTime (with seconds and nanoseconds) to `dst`.
-// Returns the updated byte slice.
+// AppendTimestamp appends a timestamp to the given byte slice in the specified format.
+// dst: The byte slice to append to.
+// t: The time.Time value to encode.
+// format: Optional argument to specify the encoding format (default is TsAuto).
+// Returns the updated byte slice with the appended timestamp.
 func AppendTimestamp(dst []byte, t time.Time, format ...TsFormat) []byte {
 	var f TsFormat
 
@@ -110,14 +113,14 @@ func AppendTimestamp(dst []byte, t time.Time, format ...TsFormat) []byte {
 	case TsInt:
 		dst = AppendInt(dst, t.Unix())
 
-	case TsForwardEventTime:
+	case TsFluentd:
 		s, ns := uint32(t.Unix()), uint32(t.Nanosecond())
 
 		dst = append(dst,
 
 			// Append the header and type
 			0xd7,
-			forwardEventTime,
+			fluentdEventTime,
 
 			// Append the seconds as a 32-bit big-endian unsigned integer
 			byte(s>>24),
@@ -136,9 +139,10 @@ func AppendTimestamp(dst []byte, t time.Time, format ...TsFormat) []byte {
 	return dst
 }
 
-// ReadEventTime reads a timestamp from `src` starting at `offset`.
-// Supports both Fluentd Forward EventTime and standard Unix timestamps.
-// Returns the decoded time, the new offset, and an error if the data is invalid or incomplete.
+// ReadTimestamp decodes a timestamp from the given byte slice starting at the specified offset.
+// src: The byte slice containing the encoded timestamp.
+// offset: The position in the slice to start decoding from.
+// Returns the decoded time.Time value, the new offset after decoding, and any error encountered.
 func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err error) {
 	if offset >= len(src) {
 		err = io.ErrUnexpectedEOF
@@ -196,7 +200,7 @@ func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err erro
 			// Extract seconds (upper 34 bits)
 			s = int64(combined >> 30)
 
-		} else if h == forwardEventTime {
+		} else if h == fluentdEventTime {
 			s = int64(int32(binary.BigEndian.Uint32(src[offset : offset+4])))
 			ns = int64(int32(binary.BigEndian.Uint32(src[offset+4 : offset+8])))
 
@@ -215,7 +219,7 @@ func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err erro
 			ns = int64(binary.BigEndian.Uint32(src[offset : offset+4]))
 			s = int64(binary.BigEndian.Uint64(src[offset+4 : offset+12]))
 
-		} else if h == forwardEventTime {
+		} else if h == fluentdEventTime {
 			s = int64(int32(binary.BigEndian.Uint32(src[offset : offset+4])))
 			ns = int64(int32(binary.BigEndian.Uint32(src[offset+4 : offset+8])))
 
