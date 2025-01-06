@@ -47,11 +47,17 @@ func AppendTimestamp(dst []byte, t time.Time, format ...TsFormat) []byte {
 		f = format[0]
 	}
 
-	switch f {
+	if f == TsAuto {
+		if t.Unix() < 0 {
+			f = Ts96
+		} else if t.Nanosecond() == 0 {
+			f = Ts32
+		} else {
+			f = Ts64
+		}
+	}
 
-	case TsAuto:
-		f = Ts32
-		fallthrough
+	switch f {
 
 	case Ts32:
 		s := uint32(t.Unix())
