@@ -59,7 +59,7 @@ func TestReader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			r := bytes.NewReader(tt.input)
-			r2 := NewReader(r, &buffer.Buffer{})
+			r2 := NewReader(r, buffer.NewBuffer(64), 4096)
 
 			v, err := r2.Read()
 
@@ -111,7 +111,7 @@ func BenchmarkReader(b *testing.B) {
 	for _, bm := range benchmarks {
 		b.Run(bm.description, func(b *testing.B) {
 			r := bytes.NewBuffer(nil)
-			r2 := NewReader(r, &buffer.Buffer{})
+			r2 := NewReader(r, buffer.NewBuffer(64), 4096)
 
 			b.ResetTimer()
 

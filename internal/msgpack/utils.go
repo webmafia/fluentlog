@@ -63,3 +63,23 @@ func floatFromBuf[T Float](buf []byte) T {
 		return 0
 	}
 }
+
+// From: https://github.com/webmafia/fast
+func roundPow(n int) int {
+	if n <= 1 {
+		return 1
+	}
+
+	// Start with the number minus one
+	n--
+
+	// Spread the highest set bit to the right
+	n |= n >> 1
+	n |= n >> 2
+	n |= n >> 4
+	n |= n >> 8
+	n |= n >> 16
+
+	// Add one to get the next power of 2
+	return n + 1
+}

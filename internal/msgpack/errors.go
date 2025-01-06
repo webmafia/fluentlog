@@ -14,6 +14,7 @@ var (
 	// ErrInvalidFormat is returned when the data does not conform to the expected MessagePack format.
 	ErrInvalidFormat     = errors.New("invalid MessagePack format")
 	ErrInvalidHeaderByte = errors.New("invalid header byte")
+	ErrLargeBuffer       = errors.New("buffer too large")
 )
 
 func expectedType(c byte, expected types.Type) (err error) {

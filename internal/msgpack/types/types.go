@@ -16,6 +16,7 @@ const (
 	Array
 	Map
 	Ext
+	Reserved // Reserved type for 0xc1
 )
 
 var typeStrings = [...]string{
@@ -29,6 +30,7 @@ var typeStrings = [...]string{
 	"array",
 	"map",
 	"ext",
+	"reserved",
 }
 
 func (t Type) String() string {
@@ -63,32 +65,38 @@ func init() {
 	}
 
 	// Fixed types
-	typeLookup[0xc0] = Nil   // nil
-	typeLookup[0xc2] = Bool  // false
-	typeLookup[0xc3] = Bool  // true
-	typeLookup[0xc4] = Bin   // bin8
-	typeLookup[0xc5] = Bin   // bin16
-	typeLookup[0xc6] = Bin   // bin32
-	typeLookup[0xc7] = Ext   // ext8
-	typeLookup[0xc8] = Ext   // ext16
-	typeLookup[0xc9] = Ext   // ext32
-	typeLookup[0xca] = Float // float32
-	typeLookup[0xcb] = Float // float64
-	typeLookup[0xcc] = Uint  // uint8
-	typeLookup[0xcd] = Uint  // uint16
-	typeLookup[0xce] = Uint  // uint32
-	typeLookup[0xcf] = Uint  // uint64
-	typeLookup[0xd0] = Int   // int8
-	typeLookup[0xd1] = Int   // int16
-	typeLookup[0xd2] = Int   // int32
-	typeLookup[0xd3] = Int   // int64
-	typeLookup[0xd9] = Str   // str8
-	typeLookup[0xda] = Str   // str16
-	typeLookup[0xdb] = Str   // str32
-	typeLookup[0xdc] = Array // array16
-	typeLookup[0xdd] = Array // array32
-	typeLookup[0xde] = Map   // map16
-	typeLookup[0xdf] = Map   // map32
+	typeLookup[0xc0] = Nil      // nil
+	typeLookup[0xc1] = Reserved // Reserved
+	typeLookup[0xc2] = Bool     // false
+	typeLookup[0xc3] = Bool     // true
+	typeLookup[0xc4] = Bin      // bin8
+	typeLookup[0xc5] = Bin      // bin16
+	typeLookup[0xc6] = Bin      // bin32
+	typeLookup[0xc7] = Ext      // ext8
+	typeLookup[0xc8] = Ext      // ext16
+	typeLookup[0xc9] = Ext      // ext32
+	typeLookup[0xca] = Float    // float32
+	typeLookup[0xcb] = Float    // float64
+	typeLookup[0xcc] = Uint     // uint8
+	typeLookup[0xcd] = Uint     // uint16
+	typeLookup[0xce] = Uint     // uint32
+	typeLookup[0xcf] = Uint     // uint64
+	typeLookup[0xd0] = Int      // int8
+	typeLookup[0xd1] = Int      // int16
+	typeLookup[0xd2] = Int      // int32
+	typeLookup[0xd3] = Int      // int64
+	typeLookup[0xd4] = Ext      // fixext1
+	typeLookup[0xd5] = Ext      // fixext2
+	typeLookup[0xd6] = Ext      // fixext4
+	typeLookup[0xd7] = Ext      // fixext8
+	typeLookup[0xd8] = Ext      // fixext16
+	typeLookup[0xd9] = Str      // str8
+	typeLookup[0xda] = Str      // str16
+	typeLookup[0xdb] = Str      // str32
+	typeLookup[0xdc] = Array    // array16
+	typeLookup[0xdd] = Array    // array32
+	typeLookup[0xde] = Map      // map16
+	typeLookup[0xdf] = Map      // map32
 
 	// Initialize lengthLookup and isLengthValue
 	for i := 0x00; i <= 0x7f; i++ { // Positive FixInt
@@ -115,6 +123,8 @@ func init() {
 	// Fixed lengths
 	lengthLookup[0xc0] = 0 // nil
 	isLengthValue[0xc0] = true
+	lengthLookup[0xc1] = 0 // Reserved
+	isLengthValue[0xc1] = true
 	lengthLookup[0xc2] = 0 // false
 	isLengthValue[0xc2] = true
 	lengthLookup[0xc3] = 0 // true
@@ -125,11 +135,11 @@ func init() {
 	isLengthValue[0xc5] = false
 	lengthLookup[0xc6] = 4 // bin32
 	isLengthValue[0xc6] = false
-	lengthLookup[0xc7] = 1 // ext8
+	lengthLookup[0xc7] = 2 // ext8 (1 byte for type + 1 byte for length)
 	isLengthValue[0xc7] = false
-	lengthLookup[0xc8] = 2 // ext16
+	lengthLookup[0xc8] = 3 // ext16 (1 byte for type + 2 bytes for length)
 	isLengthValue[0xc8] = false
-	lengthLookup[0xc9] = 4 // ext32
+	lengthLookup[0xc9] = 5 // ext32 (1 byte for type + 4 bytes for length)
 	isLengthValue[0xc9] = false
 	lengthLookup[0xca] = 4 // float32
 	isLengthValue[0xca] = true
@@ -151,6 +161,16 @@ func init() {
 	isLengthValue[0xd2] = true
 	lengthLookup[0xd3] = 8 // int64
 	isLengthValue[0xd3] = true
+	lengthLookup[0xd4] = 2 // fixext1 (1 byte for type + 1 byte for data)
+	isLengthValue[0xd4] = false
+	lengthLookup[0xd5] = 3 // fixext2 (1 byte for type + 2 bytes for data)
+	isLengthValue[0xd5] = false
+	lengthLookup[0xd6] = 5 // fixext4 (1 byte for type + 4 bytes for data)
+	isLengthValue[0xd6] = false
+	lengthLookup[0xd7] = 9 // fixext8 (1 byte for type + 8 bytes for data)
+	isLengthValue[0xd7] = false
+	lengthLookup[0xd8] = 17 // fixext16 (1 byte for type + 16 bytes for data)
+	isLengthValue[0xd8] = false
 	lengthLookup[0xd9] = 1 // str8
 	isLengthValue[0xd9] = false
 	lengthLookup[0xda] = 2 // str16

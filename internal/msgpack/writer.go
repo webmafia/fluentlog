@@ -9,11 +9,13 @@ import (
 
 type Writer struct {
 	b *buffer.Buffer
+	w io.Writer
 }
 
 // NewWriter creates a new Writer with the provided io.Writer and initial buffer size.
-func NewWriter(buf *buffer.Buffer) Writer {
+func NewWriter(w io.Writer, buf *buffer.Buffer) Writer {
 	return Writer{
+		w: w,
 		b: buf,
 	}
 }
@@ -24,6 +26,20 @@ func (w Writer) Reset() {
 
 func (w Writer) Bytes() []byte {
 	return w.b.Bytes()
+}
+
+func (w Writer) Flush() (err error) {
+	_, err = w.w.Write(w.b.B)
+
+	if err == nil {
+		w.b.Reset()
+	}
+
+	return
+}
+
+func (w Writer) Write(p []byte) (int, error) {
+	return w.b.Write(p)
 }
 
 func (w Writer) WriteTo(wr io.Writer) (int64, error) {

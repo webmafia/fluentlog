@@ -3,10 +3,31 @@ package msgpack
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
 )
+
+func ExampleReadEventTime() {
+	var buf []byte
+
+	t := time.Date(2025, 01, 01, 1, 2, 3, 4, time.UTC)
+	buf = AppendEventTime(buf, t)
+
+	fmt.Println(buf)
+
+	dst, _, err := ReadEventTime(buf, 0)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(t)
+	fmt.Println(dst)
+
+	// Output: TODO
+}
 
 func TestAppendEventTime(t *testing.T) {
 	tests := []struct {

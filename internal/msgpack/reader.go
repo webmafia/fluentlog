@@ -3,22 +3,25 @@ package msgpack
 import (
 	"io"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 type Reader struct {
-	b *buffer.Buffer
-	r io.Reader
-	n int
+	b   *buffer.Buffer
+	r   io.Reader
+	n   int
+	max int
 }
 
-func NewReader(r io.Reader, b *buffer.Buffer) Reader {
-	b.Reset()
+func NewReader(r io.Reader, buf *buffer.Buffer, maxBuf int) Reader {
+	buf.Reset()
 
 	return Reader{
-		b: b,
-		r: r,
+		b:   buf,
+		r:   r,
+		max: maxBuf,
 	}
 }
 
@@ -74,10 +77,12 @@ func (r *Reader) fill(n int) (err error) {
 }
 
 func (r *Reader) fillFromReader(n int) (err error) {
-
 	readOffset := len(r.b.B) // Start reading from the current end of valid data
 
-	r.b.Grow(n)                // Ensure the buffer has enough capacity
+	if err = r.grow(n); err != nil {
+		return
+	}
+
 	r.b.B = r.b.B[:cap(r.b.B)] // Expand buffer to its full capacity
 
 	for n > 0 {
@@ -107,6 +112,31 @@ func (r *Reader) fillFromReader(n int) (err error) {
 	return
 }
 
+// grow copies the buffer to a new, larger buffer so that there are at least n
+// bytes of capacity beyond len(b.buf).
+func (r *Reader) grow(n int) (err error) {
+	need := len(r.b.B) + n
+
+	// There is already enough capacity
+	if need <= cap(r.b.B) {
+		return
+	}
+
+	// A power-of-two value between 64 and `r.max`
+	c := min(r.max, max(64, roundPow(need)))
+
+	if c < need {
+		return ErrLargeBuffer
+	}
+
+	buf := fast.MakeNoZero(c)[:len(r.b.B)]
+	copy(buf, r.b.B)
+	r.b.B = buf
+
+	return
+}
+
+// Get current read position
 func (r *Reader) Pos() int {
 	return r.n
 }
