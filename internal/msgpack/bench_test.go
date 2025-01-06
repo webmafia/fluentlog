@@ -28,14 +28,6 @@ func BenchmarkAppend(b *testing.B) {
 		}
 	})
 
-	b.Run("Timestamp", func(b *testing.B) {
-		var buf []byte
-		t := time.Unix(1672531200, 500000000)
-		for i := 0; i < b.N; i++ {
-			buf = AppendTimestamp(buf[:0], t)
-		}
-	})
-
 	b.Run("Float", func(b *testing.B) {
 		var buf []byte
 		for i := 0; i < b.N; i++ {
@@ -77,6 +69,16 @@ func BenchmarkAppend(b *testing.B) {
 			buf = AppendString(buf[:0], "example string")
 		}
 	})
+
+	for format, formatName := range tsFormatStrings {
+		b.Run("Timestamp_"+formatName, func(b *testing.B) {
+			var buf []byte
+			t := time.Unix(1672531200, 500000000)
+			for i := 0; i < b.N; i++ {
+				buf = AppendTimestamp(buf[:0], t, TsFormat(format))
+			}
+		})
+	}
 }
 
 func BenchmarkRead(b *testing.B) {
@@ -98,13 +100,6 @@ func BenchmarkRead(b *testing.B) {
 		data := AppendBool(nil, true)
 		for i := 0; i < b.N; i++ {
 			_, _, _ = ReadBool(data, 0)
-		}
-	})
-
-	b.Run("Timestamp", func(b *testing.B) {
-		data := AppendTimestamp(nil, time.Unix(1672531200, 500000000))
-		for i := 0; i < b.N; i++ {
-			_, _, _ = ReadTimestamp(data, 0)
 		}
 	})
 
@@ -156,4 +151,13 @@ func BenchmarkRead(b *testing.B) {
 			_, _, _ = ReadStringCopy(data, 0)
 		}
 	})
+
+	for format, formatName := range tsFormatStrings {
+		b.Run("Timestamp_"+formatName, func(b *testing.B) {
+			data := AppendTimestamp(nil, time.Unix(1672531200, 500000000), TsFormat(format))
+			for i := 0; i < b.N; i++ {
+				_, _, _ = ReadTimestamp(data, 0)
+			}
+		})
+	}
 }
