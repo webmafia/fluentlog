@@ -19,6 +19,19 @@ const (
 	TsFluentd                 // Fluntd Forward EventTime.
 )
 
+var tsFormatStrings = [...]string{
+	"TsAuto",
+	"Ts32",
+	"Ts64",
+	"Ts96",
+	"TsInt",
+	"TsFluentd",
+}
+
+func (f TsFormat) String() string {
+	return tsFormatStrings[f]
+}
+
 const msgpackTimestamp = 0xff
 const fluentdEventTime = 0x00
 
@@ -231,11 +244,12 @@ func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err erro
 		offset += length
 
 	default:
-		if s, newOffset, err = ReadInt(src, origOffset); err != nil {
+		if s, offset, err = ReadInt(src, origOffset); err != nil {
 			return
 		}
 	}
 
 	t = time.Unix(s, ns)
+	newOffset = offset
 	return
 }
