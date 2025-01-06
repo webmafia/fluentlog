@@ -198,23 +198,23 @@ func init() {
 
 	// Fixext types
 	typeLookup[0xd4] = Ext // fixext 1
-	lengthLookup[0xd4] = 1
+	lengthLookup[0xd4] = 2
 	isLengthValue[0xd4] = true
 
 	typeLookup[0xd5] = Ext // fixext 2
-	lengthLookup[0xd5] = 2
+	lengthLookup[0xd5] = 3
 	isLengthValue[0xd5] = true
 
 	typeLookup[0xd6] = Ext // fixext 4
-	lengthLookup[0xd6] = 4
+	lengthLookup[0xd6] = 5
 	isLengthValue[0xd6] = true
 
 	typeLookup[0xd7] = Ext // fixext 8
-	lengthLookup[0xd7] = 8
+	lengthLookup[0xd7] = 9
 	isLengthValue[0xd7] = true
 
 	typeLookup[0xd8] = Ext // fixext 16
-	lengthLookup[0xd8] = 16
+	lengthLookup[0xd8] = 17
 	isLengthValue[0xd8] = true
 }
 
