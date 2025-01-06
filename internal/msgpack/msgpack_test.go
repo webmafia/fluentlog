@@ -12,7 +12,7 @@ func Example() {
 	var b []byte
 	b = AppendArrayHeader(b, 3)
 	b = AppendString(b, "foo.bar")
-	b = AppendEventTime(b, time.Now())
+	b = AppendTimestamp(b, time.Now())
 	// b = AppendMapHeader(b, 3)
 
 	// b = AppendString(b, "a")

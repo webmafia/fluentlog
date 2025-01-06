@@ -92,13 +92,8 @@ func (w Writer) WriteFloat(f float64) {
 }
 
 // WriteTimestamp appends a timestamp to the buffer.
-func (w Writer) WriteEventTime(t time.Time) {
-	w.b.B = AppendEventTime(w.b.B, t)
-}
-
-// WriteTimestamp appends a timestamp with millisecond precision to the buffer.
-func (w Writer) WriteEventTimeShort(t time.Time) {
-	w.b.B = AppendEventTimeShort(w.b.B, t)
+func (w Writer) WriteTimestamp(t time.Time, format ...TsFormat) {
+	w.b.B = AppendTimestamp(w.b.B, t, format...)
 }
 
 // WriteCustom appends custom data to the buffer using a provided function.

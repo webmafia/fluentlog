@@ -2,9 +2,10 @@ package types
 
 import "fmt"
 
+// Type represents the MessagePack value type.
 type Type uint8
 
-// Value constants for MessagePack
+// Value constants for MessagePack.
 const (
 	Nil Type = iota
 	Bool
@@ -16,7 +17,6 @@ const (
 	Array
 	Map
 	Ext
-	Reserved // Reserved type for 0xc1
 )
 
 var typeStrings = [...]string{
@@ -30,7 +30,6 @@ var typeStrings = [...]string{
 	"array",
 	"map",
 	"ext",
-	"reserved",
 }
 
 func (t Type) String() string {
@@ -41,150 +40,182 @@ func (t Type) String() string {
 	return typeStrings[t]
 }
 
-// Precomputed arrays for fast lookup
+// Precomputed arrays for fast lookup.
 var typeLookup [256]Type
 var lengthLookup [256]byte
 var isLengthValue [256]bool
 
 func init() {
-	// Initialize typeLookup based on MessagePack specification
-	for i := 0x00; i <= 0x7f; i++ { // Positive FixInt
+	// Initialize typeLookup based on MessagePack specification.
+
+	// Positive FixInt (0x00 to 0x7f)
+	for i := 0x00; i <= 0x7f; i++ {
 		typeLookup[i] = Uint
+		lengthLookup[i] = 0
+		isLengthValue[i] = true
 	}
-	for i := 0xe0; i <= 0xff; i++ { // Negative FixInt
+
+	// Negative FixInt (0xe0 to 0xff)
+	for i := 0xe0; i <= 0xff; i++ {
 		typeLookup[i] = Int
+		lengthLookup[i] = 0
+		isLengthValue[i] = true
 	}
-	for i := 0xa0; i <= 0xbf; i++ { // FixStr
+
+	// FixStr (0xa0 to 0xbf)
+	for i := 0xa0; i <= 0xbf; i++ {
 		typeLookup[i] = Str
+		lengthLookup[i] = byte(i - 0xa0)
+		isLengthValue[i] = true
 	}
-	for i := 0x80; i <= 0x8f; i++ { // FixMap
+
+	// FixMap (0x80 to 0x8f)
+	for i := 0x80; i <= 0x8f; i++ {
 		typeLookup[i] = Map
+		lengthLookup[i] = byte(i - 0x80)
+		isLengthValue[i] = true
 	}
-	for i := 0x90; i <= 0x9f; i++ { // FixArray
+
+	// FixArray (0x90 to 0x9f)
+	for i := 0x90; i <= 0x9f; i++ {
 		typeLookup[i] = Array
+		lengthLookup[i] = byte(i - 0x90)
+		isLengthValue[i] = true
 	}
 
 	// Fixed types
-	typeLookup[0xc0] = Nil      // nil
-	typeLookup[0xc1] = Reserved // Reserved
-	typeLookup[0xc2] = Bool     // false
-	typeLookup[0xc3] = Bool     // true
-	typeLookup[0xc4] = Bin      // bin8
-	typeLookup[0xc5] = Bin      // bin16
-	typeLookup[0xc6] = Bin      // bin32
-	typeLookup[0xc7] = Ext      // ext8
-	typeLookup[0xc8] = Ext      // ext16
-	typeLookup[0xc9] = Ext      // ext32
-	typeLookup[0xca] = Float    // float32
-	typeLookup[0xcb] = Float    // float64
-	typeLookup[0xcc] = Uint     // uint8
-	typeLookup[0xcd] = Uint     // uint16
-	typeLookup[0xce] = Uint     // uint32
-	typeLookup[0xcf] = Uint     // uint64
-	typeLookup[0xd0] = Int      // int8
-	typeLookup[0xd1] = Int      // int16
-	typeLookup[0xd2] = Int      // int32
-	typeLookup[0xd3] = Int      // int64
-	typeLookup[0xd4] = Ext      // fixext1
-	typeLookup[0xd5] = Ext      // fixext2
-	typeLookup[0xd6] = Ext      // fixext4
-	typeLookup[0xd7] = Ext      // fixext8
-	typeLookup[0xd8] = Ext      // fixext16
-	typeLookup[0xd9] = Str      // str8
-	typeLookup[0xda] = Str      // str16
-	typeLookup[0xdb] = Str      // str32
-	typeLookup[0xdc] = Array    // array16
-	typeLookup[0xdd] = Array    // array32
-	typeLookup[0xde] = Map      // map16
-	typeLookup[0xdf] = Map      // map32
-
-	// Initialize lengthLookup and isLengthValue
-	for i := 0x00; i <= 0x7f; i++ { // Positive FixInt
-		lengthLookup[i] = 0
-		isLengthValue[i] = true
-	}
-	for i := 0xe0; i <= 0xff; i++ { // Negative FixInt
-		lengthLookup[i] = 0
-		isLengthValue[i] = true
-	}
-	for i := 0xa0; i <= 0xbf; i++ { // FixStr
-		lengthLookup[i] = byte(i - 0xa0) // Length embedded in the type byte
-		isLengthValue[i] = true
-	}
-	for i := 0x80; i <= 0x8f; i++ { // FixMap
-		lengthLookup[i] = byte(i - 0x80) // Number of key-value pairs
-		isLengthValue[i] = true
-	}
-	for i := 0x90; i <= 0x9f; i++ { // FixArray
-		lengthLookup[i] = byte(i - 0x90) // Number of elements
-		isLengthValue[i] = true
-	}
-
-	// Fixed lengths
-	lengthLookup[0xc0] = 0 // nil
+	typeLookup[0xc0] = Nil // nil
+	lengthLookup[0xc0] = 0
 	isLengthValue[0xc0] = true
-	lengthLookup[0xc1] = 0 // Reserved
-	isLengthValue[0xc1] = true
-	lengthLookup[0xc2] = 0 // false
+
+	typeLookup[0xc2] = Bool // false
+	lengthLookup[0xc2] = 0
 	isLengthValue[0xc2] = true
-	lengthLookup[0xc3] = 0 // true
+
+	typeLookup[0xc3] = Bool // true
+	lengthLookup[0xc3] = 0
 	isLengthValue[0xc3] = true
-	lengthLookup[0xc4] = 1 // bin8
+
+	// Binary types
+	typeLookup[0xc4] = Bin // bin8
+	lengthLookup[0xc4] = 1
 	isLengthValue[0xc4] = false
-	lengthLookup[0xc5] = 2 // bin16
+
+	typeLookup[0xc5] = Bin // bin16
+	lengthLookup[0xc5] = 2
 	isLengthValue[0xc5] = false
-	lengthLookup[0xc6] = 4 // bin32
+
+	typeLookup[0xc6] = Bin // bin32
+	lengthLookup[0xc6] = 4
 	isLengthValue[0xc6] = false
-	lengthLookup[0xc7] = 2 // ext8 (1 byte for type + 1 byte for length)
+
+	// Extension types
+	typeLookup[0xc7] = Ext // ext8
+	lengthLookup[0xc7] = 1
 	isLengthValue[0xc7] = false
-	lengthLookup[0xc8] = 3 // ext16 (1 byte for type + 2 bytes for length)
+
+	typeLookup[0xc8] = Ext // ext16
+	lengthLookup[0xc8] = 2
 	isLengthValue[0xc8] = false
-	lengthLookup[0xc9] = 5 // ext32 (1 byte for type + 4 bytes for length)
+
+	typeLookup[0xc9] = Ext // ext32
+	lengthLookup[0xc9] = 4
 	isLengthValue[0xc9] = false
-	lengthLookup[0xca] = 4 // float32
+
+	// Float types
+	typeLookup[0xca] = Float // float32
+	lengthLookup[0xca] = 4
 	isLengthValue[0xca] = true
-	lengthLookup[0xcb] = 8 // float64
+
+	typeLookup[0xcb] = Float // float64
+	lengthLookup[0xcb] = 8
 	isLengthValue[0xcb] = true
-	lengthLookup[0xcc] = 1 // uint8
+
+	// Unsigned integers
+	typeLookup[0xcc] = Uint // uint8
+	lengthLookup[0xcc] = 1
 	isLengthValue[0xcc] = true
-	lengthLookup[0xcd] = 2 // uint16
+
+	typeLookup[0xcd] = Uint // uint16
+	lengthLookup[0xcd] = 2
 	isLengthValue[0xcd] = true
-	lengthLookup[0xce] = 4 // uint32
+
+	typeLookup[0xce] = Uint // uint32
+	lengthLookup[0xce] = 4
 	isLengthValue[0xce] = true
-	lengthLookup[0xcf] = 8 // uint64
+
+	typeLookup[0xcf] = Uint // uint64
+	lengthLookup[0xcf] = 8
 	isLengthValue[0xcf] = true
-	lengthLookup[0xd0] = 1 // int8
+
+	// Signed integers
+	typeLookup[0xd0] = Int // int8
+	lengthLookup[0xd0] = 1
 	isLengthValue[0xd0] = true
-	lengthLookup[0xd1] = 2 // int16
+
+	typeLookup[0xd1] = Int // int16
+	lengthLookup[0xd1] = 2
 	isLengthValue[0xd1] = true
-	lengthLookup[0xd2] = 4 // int32
+
+	typeLookup[0xd2] = Int // int32
+	lengthLookup[0xd2] = 4
 	isLengthValue[0xd2] = true
-	lengthLookup[0xd3] = 8 // int64
+
+	typeLookup[0xd3] = Int // int64
+	lengthLookup[0xd3] = 8
 	isLengthValue[0xd3] = true
-	lengthLookup[0xd4] = 2 // fixext1 (1 byte for type + 1 byte for data)
-	isLengthValue[0xd4] = false
-	lengthLookup[0xd5] = 3 // fixext2 (1 byte for type + 2 bytes for data)
-	isLengthValue[0xd5] = false
-	lengthLookup[0xd6] = 5 // fixext4 (1 byte for type + 4 bytes for data)
-	isLengthValue[0xd6] = false
-	lengthLookup[0xd7] = 9 // fixext8 (1 byte for type + 8 bytes for data)
-	isLengthValue[0xd7] = false
-	lengthLookup[0xd8] = 17 // fixext16 (1 byte for type + 16 bytes for data)
-	isLengthValue[0xd8] = false
-	lengthLookup[0xd9] = 1 // str8
+
+	// String types
+	typeLookup[0xd9] = Str // str8
+	lengthLookup[0xd9] = 1
 	isLengthValue[0xd9] = false
-	lengthLookup[0xda] = 2 // str16
+
+	typeLookup[0xda] = Str // str16
+	lengthLookup[0xda] = 2
 	isLengthValue[0xda] = false
-	lengthLookup[0xdb] = 4 // str32
+
+	typeLookup[0xdb] = Str // str32
+	lengthLookup[0xdb] = 4
 	isLengthValue[0xdb] = false
-	lengthLookup[0xdc] = 2 // array16
+
+	// Array types
+	typeLookup[0xdc] = Array // array16
+	lengthLookup[0xdc] = 2
 	isLengthValue[0xdc] = false
-	lengthLookup[0xdd] = 4 // array32
+
+	typeLookup[0xdd] = Array // array32
+	lengthLookup[0xdd] = 4
 	isLengthValue[0xdd] = false
-	lengthLookup[0xde] = 2 // map16
+
+	// Map types
+	typeLookup[0xde] = Map // map16
+	lengthLookup[0xde] = 2
 	isLengthValue[0xde] = false
-	lengthLookup[0xdf] = 4 // map32
+
+	typeLookup[0xdf] = Map // map32
+	lengthLookup[0xdf] = 4
 	isLengthValue[0xdf] = false
+
+	// Fixext types
+	typeLookup[0xd4] = Ext // fixext 1
+	lengthLookup[0xd4] = 1
+	isLengthValue[0xd4] = true
+
+	typeLookup[0xd5] = Ext // fixext 2
+	lengthLookup[0xd5] = 2
+	isLengthValue[0xd5] = true
+
+	typeLookup[0xd6] = Ext // fixext 4
+	lengthLookup[0xd6] = 4
+	isLengthValue[0xd6] = true
+
+	typeLookup[0xd7] = Ext // fixext 8
+	lengthLookup[0xd7] = 8
+	isLengthValue[0xd7] = true
+
+	typeLookup[0xd8] = Ext // fixext 16
+	lengthLookup[0xd8] = 16
+	isLengthValue[0xd8] = true
 }
 
 // Get returns the type of the MessagePack value, its length, and a boolean indicating the nature of the length.

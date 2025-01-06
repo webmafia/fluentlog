@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-func ExampleReadEventTime() {
+func ExampleReadTimestamp() {
 	var buf []byte
 
-	t := time.Date(2025, 01, 01, 1, 2, 3, 4, time.UTC)
-	buf = AppendEventTime(buf, t)
+	t := time.Date(2025, 01, 01, 1, 2, 3, 0, time.UTC)
+	buf = AppendTimestamp(buf, t, TsForwardEventTime)
 
 	fmt.Println(buf)
 
-	dst, _, err := ReadEventTime(buf, 0)
+	dst, _, err := ReadTimestamp(buf, 0)
 
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Println(t)
-	fmt.Println(dst)
+	fmt.Println(dst.UTC())
 
 	// Output: TODO
 }
@@ -44,7 +44,7 @@ func TestAppendEventTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := AppendEventTime(nil, tt.input)
+			result := AppendTimestamp(nil, tt.input)
 			if !bytes.Equal(result, tt.expected) {
 				t.Errorf("expected %x, got %x", tt.expected, result)
 			}
@@ -67,7 +67,7 @@ func TestAppendEventTimeShort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := AppendEventTimeShort(nil, tt.input)
+			result := AppendTimestamp(nil, tt.input)
 			if !bytes.Equal(result, tt.expected) {
 				t.Errorf("expected %x, got %x", tt.expected, result)
 			}
@@ -128,7 +128,7 @@ func TestReadEventTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, newOffset, err := ReadEventTime(tt.input, tt.offset)
+			result, newOffset, err := ReadTimestamp(tt.input, tt.offset)
 
 			// Check for expected error
 			if tt.expectedErr != nil {

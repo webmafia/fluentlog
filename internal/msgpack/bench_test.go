@@ -28,11 +28,11 @@ func BenchmarkAppend(b *testing.B) {
 		}
 	})
 
-	b.Run("EventTime", func(b *testing.B) {
+	b.Run("Timestamp", func(b *testing.B) {
 		var buf []byte
 		t := time.Unix(1672531200, 500000000)
 		for i := 0; i < b.N; i++ {
-			buf = AppendEventTime(buf[:0], t)
+			buf = AppendTimestamp(buf[:0], t)
 		}
 	})
 
@@ -101,10 +101,10 @@ func BenchmarkRead(b *testing.B) {
 		}
 	})
 
-	b.Run("EventTime", func(b *testing.B) {
-		data := AppendEventTime(nil, time.Unix(1672531200, 500000000))
+	b.Run("Timestamp", func(b *testing.B) {
+		data := AppendTimestamp(nil, time.Unix(1672531200, 500000000))
 		for i := 0; i < b.N; i++ {
-			_, _, _ = ReadEventTime(data, 0)
+			_, _, _ = ReadTimestamp(data, 0)
 		}
 	})
 

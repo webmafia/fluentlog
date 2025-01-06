@@ -182,8 +182,8 @@ func (v Value) Bin() (val []byte) {
 	return
 }
 
-func (v Value) EventTime() (val time.Time) {
-	val, _, _ = ReadEventTime(v, 0)
+func (v Value) Timestamp() (val time.Time) {
+	val, _, _ = ReadTimestamp(v, 0)
 	return
 }
 
@@ -216,7 +216,7 @@ func (v Value) String() string {
 		return "Map<" + strconv.Itoa(v.Len()) + ">"
 
 	case types.Ext:
-		return v.EventTime().Format(time.DateTime)
+		return v.Timestamp().Format(time.DateTime)
 	}
 
 	return ""
@@ -255,7 +255,7 @@ func (v Value) AppendText(b []byte) ([]byte, error) {
 		return append(b, '>'), nil
 
 	case types.Ext:
-		return v.EventTime().AppendFormat(b, time.DateTime), nil
+		return v.Timestamp().AppendFormat(b, time.DateTime), nil
 	}
 
 	return b, ErrInvalidFormat
