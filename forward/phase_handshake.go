@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
@@ -84,22 +83,14 @@ func (c *Client) readHelo() (nonce []byte, err error) {
 		switch key {
 
 		case "nonce":
-			var nonceStr string
-
-			if nonceStr, err = c.r.ReadStr(); err != nil {
+			if nonce, err = c.r.ReadBin(); err != nil {
 				return
 			}
-
-			nonce = fast.StringToBytes(nonceStr)
 
 		case "auth":
-			var authSaltStr string
-
-			if authSaltStr, err = c.r.ReadStr(); err != nil {
+			if authSalt, err = c.r.ReadBin(); err != nil {
 				return
 			}
-
-			authSalt = fast.StringToBytes(authSaltStr)
 
 		case "keepalive":
 			if keepAlive, err = c.r.ReadBool(); err != nil {
@@ -171,18 +162,15 @@ func (s *ServerConn) readPing(nonce []byte) (salt []byte, sharedKey []byte, err 
 	var (
 		clientHostname string
 		digest         string
-		saltStr        string
 	)
 
 	if clientHostname, err = s.r.ReadStr(); err != nil {
 		return
 	}
 
-	if saltStr, err = s.r.ReadStr(); err != nil {
+	if salt, err = s.r.ReadBin(); err != nil {
 		return
 	}
-
-	salt = fast.StringToBytes(saltStr)
 
 	if digest, err = s.r.ReadStr(); err != nil {
 		return

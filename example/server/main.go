@@ -24,8 +24,8 @@ func startServer(ctx context.Context) (err error) {
 		SharedKey: forward.SharedKey([]byte("secret")),
 	})
 
-	addr := "localhost:24224"
-	// addr := "localhost:24284"
+	// addr := "localhost:24224"
+	addr := "localhost:24284"
 
 	return serv.Listen(ctx, addr, func(b *buffer.Buffer) error {
 		log.Println(b.String())
