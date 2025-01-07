@@ -17,4 +17,5 @@ const (
 	ErrInvalidEntry     = Error("invalid entry")
 	ErrFailedConn       = Error("failed connection")
 	ErrFailedAuth       = Error("failed authentication")
+	ErrNotSupported     = Error("not supported")
 )

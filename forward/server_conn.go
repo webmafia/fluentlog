@@ -270,12 +270,56 @@ func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 	return
 }
 
-func (s *ServerConn) packedForwardMode(tag string, bin msgpack.Value) (err error) {
+func (s *ServerConn) packedForwardMode(tag string, v msgpack.Value) (err error) {
+	gzip, err := s.isGzip()
+
+	if err != nil {
+		return
+	}
+
+	if gzip {
+		return s.compressedPackedForwardMode(tag, v)
+	}
+
+	target := v.Len() + s.r.Total()
+
+	for s.r.Total() < target {
+		if v, err = s.r.Read(); err != nil {
+			return
+		}
+
+		if v.Type() != types.Array {
+			return ErrInvalidEntry
+		}
+
+		if err = s.forwardMode(tag, v); err != nil {
+			return
+		}
+	}
+
+	if s.r.Total() != target {
+		err = ErrInvalidEntry
+	}
+
+	return
+}
+
+func (s *ServerConn) isGzip() (ok bool, err error) {
+	magicNumbers, err := s.r.Peek(3)
+
+	if err != nil {
+		return
+	}
+
+	ok = (magicNumbers[0] == 0x1f &&
+		magicNumbers[1] == 0x8b &&
+		magicNumbers[2] == 8)
+
 	return
 }
 
 func (s *ServerConn) compressedPackedForwardMode(tag string, bin msgpack.Value) (err error) {
-	return
+	return fmt.Errorf("%w: compressed (gzip) stream", ErrNotSupported)
 }
 
 func (s *ServerConn) entry(tag string, ts, rec msgpack.Value) (err error) {

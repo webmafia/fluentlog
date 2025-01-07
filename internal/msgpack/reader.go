@@ -13,6 +13,7 @@ type Reader struct {
 	b   *buffer.Buffer
 	r   io.Reader
 	n   int
+	tot int
 	max int
 }
 
@@ -40,7 +41,7 @@ func (r *Reader) Read() (v Value, err error) {
 	}
 
 	t, length, isValueLength := types.Get(r.b.B[r.n])
-	r.n++
+	r.consume(1)
 
 	if !isValueLength {
 		pos := r.n
@@ -49,7 +50,7 @@ func (r *Reader) Read() (v Value, err error) {
 			return
 		}
 
-		r.n += length
+		r.consume(length)
 		length = int(uintFromBuf[uint](r.b.B[pos:r.n]))
 	}
 
@@ -58,7 +59,7 @@ func (r *Reader) Read() (v Value, err error) {
 			return
 		}
 
-		r.n += length
+		r.consume(length)
 	}
 
 	v = r.b.B[start:r.n]
@@ -140,14 +141,14 @@ func (r *Reader) ReadHead() (v Value, err error) {
 	}
 
 	_, length, isValueLength := types.Get(r.b.B[r.n])
-	r.n++
+	r.consume(1)
 
 	if !isValueLength {
 		if err = r.fill(length); err != nil {
 			return
 		}
 
-		r.n += length
+		r.consume(length)
 	}
 
 	v = r.b.B[start:r.n]
@@ -194,7 +195,7 @@ func (r *Reader) ReadFull(v Value) (Value, error) {
 			return v, err
 		}
 
-		r.n += count
+		r.consume(count)
 	}
 
 	return Value(r.b.B[start:r.n]), nil
@@ -276,9 +277,19 @@ func (r *Reader) grow(n int) (err error) {
 	return
 }
 
+func (r *Reader) consume(n int) {
+	r.n += n
+	r.tot += n
+}
+
 // Get current read position
 func (r *Reader) Pos() int {
 	return r.n
+}
+
+// Get total bytes read
+func (r *Reader) Total() int {
+	return r.tot
 }
 
 // Release resets the reader state after processing a message.
