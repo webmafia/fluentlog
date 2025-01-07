@@ -10,11 +10,12 @@ import (
 )
 
 type Reader struct {
-	b   *buffer.Buffer
-	r   io.Reader
-	n   int
-	tot int
-	max int
+	b   *buffer.Buffer // Buffer
+	r   io.Reader      // Origin
+	n   int            // Cursor position
+	tot int            // Total read bytes
+	max int            // Max size of buffer
+	rp  int            // Release point
 }
 
 func NewReader(r io.Reader, buf *buffer.Buffer, maxBuf int) Reader {
@@ -271,7 +272,7 @@ func (r *Reader) grow(n int) (err error) {
 	}
 
 	buf := fast.MakeNoZero(c)[:len(r.b.B)]
-	copy(buf, r.b.B)
+	r.migrateBuffer(buf)
 	r.b.B = buf
 
 	return
@@ -283,30 +284,65 @@ func (r *Reader) consume(n int) {
 }
 
 // Get current read position
-func (r *Reader) Pos() int {
-	return r.n
-}
+// func (r *Reader) Pos() int {
+// 	return r.n
+// }
 
 // Get total bytes read
 func (r *Reader) Total() int {
 	return r.tot
 }
 
-// Release resets the reader state after processing a message.
-// It discards consumed data and prepares for the next message.
-func (r *Reader) Release(n int) {
-	if n < 0 || n > r.n {
+// Sets the release point as current position. Anything before this will be kept after release.
+func (r *Reader) SetReleasePoint() {
+	r.rp = r.n
+}
+
+func (r *Reader) ResetReleasePoint() {
+	r.rp = 0
+}
+
+// Releases the buffer between the release point and the current position.
+func (r *Reader) Release(force ...bool) {
+	if r.shouldRelease() || (len(force) > 0 && force[0]) {
+		r.release()
+	}
+}
+
+func (r *Reader) release() {
+	if r.n <= r.rp {
 		return
 	}
 
-	// Move unread data to position `n`
-	copy(r.b.B[n:], r.b.B[r.n:])
-
-	// Adjust `r.n` to reflect the new end of valid data
-	r.n = n + (len(r.b.B) - r.n)
-
-	// Resize the buffer to include only valid data
+	n := r.n - r.rp
+	copy(r.b.B[r.rp:], r.b.B[r.n:])
+	r.n -= n
 	r.b.B = r.b.B[:r.n]
+}
+
+func (r *Reader) migrateBuffer(buf []byte) {
+	if r.n <= r.rp {
+		copy(buf, r.b.B)
+	} else {
+		n := r.n - r.rp
+
+		if r.rp > 0 {
+			copy(buf[:r.rp], r.b.B[:r.rp])
+		}
+
+		copy(buf[r.rp:], r.b.B[r.n:])
+		r.n -= n
+		r.b.B = r.b.B[:r.n]
+	}
+}
+
+func (r *Reader) shouldRelease() bool {
+	unused := r.n - r.rp
+	total := len(r.b.B)
+
+	// Release only if:
+	return unused > (total/2) || // Unused data is significant
+		(total >= (r.max/2) && unused > 64) // Prevent releasing trivial unused data
 }
 
 func (r *Reader) Peek(n int) (b []byte, err error) {

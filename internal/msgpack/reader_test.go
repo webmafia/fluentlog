@@ -178,7 +178,7 @@ func TestRelease(t *testing.T) {
 				n: test.rn,
 			}
 
-			r.Release(test.releaseN)
+			r.Release()
 
 			if !bytes.Equal(r.b.B, test.expectedBuf) {
 				t.Errorf("buffer mismatch: got %v, want %v", r.b.B, test.expectedBuf)
