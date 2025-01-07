@@ -33,18 +33,6 @@ func (v Value) Type() (t types.Type) {
 	return
 }
 
-func (v Value) expectType(t types.Type) (err error) {
-	if len(v) == 0 {
-		return ErrShortBuffer
-	}
-
-	if t2, _, _ := types.Get(v[0]); t2 != t {
-		err = fmt.Errorf("%w: expected %s, got %s", ErrInvalidHeaderByte, t, t2)
-	}
-
-	return
-}
-
 func (v Value) Array() iter.Seq[Value] {
 	return func(yield func(Value) bool) {
 		if len(v) == 0 {
@@ -145,9 +133,11 @@ func (v Value) BytesLen() (l int) {
 }
 
 // Whether the value has its full bytes.
-func (v Value) IsComplete() bool {
-	return len(v) >= v.BytesLen()
-}
+// func (v Value) IsComplete() bool {
+// 	l := len(v)
+// 	bl := v.BytesLen()
+// 	return l >= bl
+// }
 
 func (v Value) Len() (l int) {
 	if len(v) == 0 {

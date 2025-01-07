@@ -70,6 +70,13 @@ func BenchmarkAppend(b *testing.B) {
 		}
 	})
 
+	b.Run("AnyString", func(b *testing.B) {
+		var buf []byte
+		for i := 0; i < b.N; i++ {
+			buf = AppendAny(buf[:0], "example string")
+		}
+	})
+
 	for format, formatName := range tsFormatStrings {
 		b.Run("Timestamp_"+formatName, func(b *testing.B) {
 			var buf []byte

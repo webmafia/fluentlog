@@ -2,8 +2,10 @@ package forward
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
+	"time"
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
@@ -11,7 +13,7 @@ import (
 
 type Client struct {
 	addr           string
-	conn           net.Conn
+	conn           *net.TCPConn
 	r              msgpack.Reader
 	w              msgpack.Writer
 	opt            ClientOptions
@@ -34,9 +36,18 @@ func NewClient(addr string, opt ClientOptions) *Client {
 }
 
 func (c *Client) Connect(ctx context.Context) (err error) {
-	var d net.Dialer
-	if c.conn, err = d.DialContext(ctx, "tcp", c.addr); err != nil {
-		return
+	var (
+		dial net.Dialer
+		conn net.Conn
+		ok   bool
+	)
+
+	if conn, err = dial.DialContext(ctx, "tcp", c.addr); err != nil {
+		return errors.Join(ErrFailedConn, err)
+	}
+
+	if c.conn, ok = conn.(*net.TCPConn); !ok {
+		return ErrFailedConn
 	}
 
 	c.r.Reset(c.conn)
@@ -62,6 +73,30 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 	c.r.Release(0)
 
 	return
+}
+
+func (c *Client) ensureConnection() (err error) {
+	if c.conn != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Todo: Retry (https://github.com/cenkalti/backoff)
+	if err = c.Connect(ctx); err != nil {
+		return
+	}
+
+	return
+}
+
+func (c *Client) Write(b []byte) (n int, err error) {
+	if err = c.ensureConnection(); err != nil {
+		return
+	}
+
+	return c.conn.Write(b)
 }
 
 // func (c *Client) Send(msg fluentlog.Message) (err error) {

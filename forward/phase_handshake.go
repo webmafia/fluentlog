@@ -84,14 +84,22 @@ func (c *Client) readHelo() (nonce []byte, err error) {
 		switch key {
 
 		case "nonce":
-			if nonce, err = c.r.ReadBin(); err != nil {
+			var nonceStr string
+
+			if nonceStr, err = c.r.ReadStr(); err != nil {
 				return
 			}
 
+			nonce = fast.StringToBytes(nonceStr)
+
 		case "auth":
-			if authSalt, err = c.r.ReadBin(); err != nil {
+			var authSaltStr string
+
+			if authSaltStr, err = c.r.ReadStr(); err != nil {
 				return
 			}
+
+			authSalt = fast.StringToBytes(authSaltStr)
 
 		case "keepalive":
 			if keepAlive, err = c.r.ReadBool(); err != nil {

@@ -1,6 +1,7 @@
 package msgpack
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/webmafia/fast"
@@ -72,11 +73,8 @@ func (r *Reader) ReadStr() (s string, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Str); err != nil {
-		return
-	}
-
-	return v.Str(), nil
+	s, _, err = ReadString(v, 0)
+	return
 }
 
 func (r *Reader) ReadBin() (b []byte, err error) {
@@ -86,11 +84,8 @@ func (r *Reader) ReadBin() (b []byte, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Bin); err != nil {
-		return
-	}
-
-	return v.Bin(), nil
+	b, _, err = ReadBinary(v, 0)
+	return
 }
 
 func (r *Reader) ReadInt() (i int64, err error) {
@@ -100,11 +95,8 @@ func (r *Reader) ReadInt() (i int64, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Int); err != nil {
-		return
-	}
-
-	return v.Int(), nil
+	i, _, err = ReadInt(v, 0)
+	return
 }
 
 func (r *Reader) ReadUint() (i uint64, err error) {
@@ -114,11 +106,8 @@ func (r *Reader) ReadUint() (i uint64, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Uint); err != nil {
-		return
-	}
-
-	return v.Uint(), nil
+	i, _, err = ReadUint(v, 0)
+	return
 }
 
 func (r *Reader) ReadFloat() (f float64, err error) {
@@ -128,11 +117,8 @@ func (r *Reader) ReadFloat() (f float64, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Float); err != nil {
-		return
-	}
-
-	return v.Float(), nil
+	f, _, err = ReadFloat(v, 0)
+	return
 }
 
 func (r *Reader) ReadBool() (b bool, err error) {
@@ -142,11 +128,76 @@ func (r *Reader) ReadBool() (b bool, err error) {
 		return
 	}
 
-	if err = v.expectType(types.Bool); err != nil {
+	b, _, err = ReadBool(v, 0)
+	return
+}
+
+func (r *Reader) ReadHead() (v Value, err error) {
+	start := r.n
+
+	if err = r.fill(1); err != nil {
 		return
 	}
 
-	return v.Bool(), nil
+	_, length, isValueLength := types.Get(r.b.B[r.n])
+	r.n++
+
+	if !isValueLength {
+		if err = r.fill(length); err != nil {
+			return
+		}
+
+		r.n += length
+	}
+
+	v = r.b.B[start:r.n]
+
+	return
+}
+
+func (r *Reader) ReadComplete(v Value) (Value, error) {
+	l := len(v)
+
+	if l > r.n {
+		return v, ErrShortBuffer
+	}
+
+	start := r.n - l
+
+	// Ensure that this was the last thing read
+	if !bytes.Equal(v, r.b.B[start:r.n]) {
+		return v, ErrShortBuffer // Todo: Explicit error?
+	}
+
+	count := v.Len()
+
+	if typ := v.Type(); typ == types.Array || typ == types.Map {
+		if typ == types.Map {
+			count *= 2
+		}
+
+		for range count {
+			t, err := r.Read()
+
+			if err != nil {
+				return v, err
+			}
+
+			if typ := t.Type(); typ == types.Array || typ == types.Map {
+				if _, err := r.ReadComplete(t); err != nil {
+					return v, err
+				}
+			}
+		}
+	} else {
+		if err := r.fill(count); err != nil {
+			return v, err
+		}
+
+		r.n += count
+	}
+
+	return Value(r.b.B[start:r.n]), nil
 }
 
 // Ensures that there is at least n bytes of data in buffer

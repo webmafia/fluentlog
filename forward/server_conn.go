@@ -1,11 +1,13 @@
 package forward
 
 import (
+	"fmt"
 	"log"
 	"net"
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 type ServerConn struct {
@@ -18,24 +20,29 @@ type ServerConn struct {
 func (s *ServerConn) Handle(fn func(*buffer.Buffer) error) (err error) {
 	defer s.conn.Close()
 
-	nonce, err := s.writeHelo()
-
-	if err != nil {
+	if err = s.handshakePhase(); err != nil {
 		return
 	}
 
-	salt, sharedKey, err := s.readPing(nonce[:])
-
-	if err != nil {
-		s.writePong(nonce[:], salt, sharedKey, false, err.Error())
+	if err = s.transportPhase(); err != nil {
 		return
 	}
 
-	if err = s.writePong(nonce[:], salt, sharedKey, true, ""); err != nil {
-		return
-	}
+	// s.r.Release(0)
 
-	log.Println("server: client connected!")
+	// for {
+	// 	// s.r.Release(0)
+
+	// 	arr, err := s.r.Read()
+
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	log.Println(arr.Type(), ":", arr.String())
+	// }
+
+	// -----------------------------------------------------------------------------------
 
 	// for {
 	// 	s.r.Release(0)
@@ -106,6 +113,176 @@ func (s *ServerConn) Handle(fn func(*buffer.Buffer) error) (err error) {
 	// 	}
 	// }
 
+	return
+}
+
+func (s *ServerConn) handshakePhase() (err error) {
+	nonce, err := s.writeHelo()
+
+	if err != nil {
+		return
+	}
+
+	salt, sharedKey, err := s.readPing(nonce[:])
+
+	if err != nil {
+		s.writePong(nonce[:], salt, sharedKey, false, err.Error())
+		return
+	}
+
+	if err = s.writePong(nonce[:], salt, sharedKey, true, ""); err != nil {
+		return
+	}
+
+	log.Println("server: client connected!")
+
+	return
+}
+
+// Once the connection becomes transport phase, client can send events to servers, in one event mode of:
+//   - Message Mode (single message)
+//   - Forward Mode (an array of messages)
+//   - PackedForward Mode (an array of messages sent as binary)
+//   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
+func (s *ServerConn) transportPhase() (err error) {
+	for {
+		// Todo: Release buffer
+
+		var (
+			arr msgpack.Value
+			tag string
+			val msgpack.Value
+		)
+
+		if arr, err = s.r.Read(); err != nil {
+			return err
+		}
+
+		// Abort early if invalid data
+		if arr.Type() != types.Array || arr.Len() < 2 || arr.Len() > 4 {
+			return fmt.Errorf("unexpected array length: %d", arr.Len())
+		}
+
+		if tag, err = s.r.ReadStr(); err != nil {
+			return
+		}
+
+		if val, err = s.r.ReadHead(); err != nil {
+			return
+		}
+
+		switch val.Type() {
+
+		case types.Array:
+			if err = s.forwardMode(tag, val); err != nil {
+				return
+			}
+
+		case types.Bin:
+			if err = s.packedForwardMode(tag, val); err != nil {
+				return
+			}
+
+		default:
+			if err = s.messageMode(tag, val, arr.Len()); err != nil {
+				return
+			}
+
+		}
+	}
+
+	return
+}
+
+func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err error) {
+	if arrLen < 3 || arrLen > 4 {
+		return
+	}
+
+	if ts, err = s.r.ReadComplete(ts); err != nil {
+		return
+	}
+
+	if ts.Timestamp().IsZero() {
+		return ErrInvalidEntry
+	}
+
+	var rec msgpack.Value
+
+	if rec, err = s.r.Read(); err != nil {
+		return
+	}
+
+	if rec.Type() != types.Map {
+		return ErrInvalidEntry
+	}
+
+	if rec, err = s.r.ReadComplete(rec); err != nil {
+		return
+	}
+
+	if arrLen == 4 {
+		if _, err = s.r.Read(); err != nil {
+			return
+		}
+	}
+
+	return s.entry(tag, ts, rec)
+}
+
+func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
+	var (
+		entry msgpack.Value
+		ts    msgpack.Value
+		rec   msgpack.Value
+	)
+
+	for range arr.Len() {
+		if entry, err = s.r.Read(); err != nil {
+			return
+		}
+
+		if entry.Type() != types.Array || entry.Len() != 2 {
+			return ErrInvalidEntry
+		}
+
+		if ts, err = s.r.Read(); err != nil {
+			return
+		}
+
+		if rec, err = s.r.Read(); err != nil {
+			return
+		}
+
+		if rec.Type() != types.Map {
+			return ErrInvalidEntry
+		}
+
+		if rec, err = s.r.ReadComplete(rec); err != nil {
+			return
+		}
+
+		if err = s.entry(tag, ts, rec); err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (s *ServerConn) packedForwardMode(tag string, bin msgpack.Value) (err error) {
+	return
+}
+
+func (s *ServerConn) compressedPackedForwardMode(tag string, bin msgpack.Value) (err error) {
+	return
+}
+
+func (s *ServerConn) entry(tag string, ts, rec msgpack.Value) (err error) {
+	log.Println(tag, ts, rec)
+	for k, v := range rec.Map() {
+		log.Println("  ", k, "=", v)
+	}
 	return
 }
 

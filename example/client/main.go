@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/webmafia/fluentlog"
 	"github.com/webmafia/fluentlog/forward"
 )
 
@@ -24,9 +25,20 @@ func startClient(ctx context.Context) (err error) {
 		SharedKey: []byte("secret"),
 	})
 
-	if err = cli.Connect(ctx); err != nil {
-		return
+	l := fluentlog.NewLogger(cli)
+	defer l.Close()
+
+	// cli.Connect(ctx)
+
+	for i := range 32 {
+		l.Log("hello world",
+			"count", i+1,
+		)
 	}
+
+	// if err = cli.Connect(ctx); err != nil {
+	// 	return
+	// }
 
 	time.Sleep(3 * time.Second)
 

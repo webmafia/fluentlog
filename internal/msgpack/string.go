@@ -38,6 +38,12 @@ func ReadString(src []byte, offset int) (s string, newOffset int, err error) {
 
 	typ, length, isValueLength := types.Get(src[offset])
 
+	if typ == types.Bin {
+		var v []byte
+		v, newOffset, err = ReadBinary(src, offset)
+		return fast.BytesToString(v), newOffset, err
+	}
+
 	if typ != types.Str {
 		err = expectedType(src[offset], types.Str)
 		return

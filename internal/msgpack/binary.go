@@ -1,6 +1,7 @@
 package msgpack
 
 import (
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
@@ -28,6 +29,12 @@ func ReadBinary(src []byte, offset int) (data []byte, newOffset int, err error) 
 	}
 
 	typ, length, isValueLength := types.Get(src[offset])
+
+	if typ == types.Str {
+		var v string
+		v, newOffset, err = ReadString(src, offset)
+		return fast.StringToBytes(v), newOffset, err
+	}
 
 	if typ != types.Bin {
 		err = expectedType(src[offset], types.Bin)

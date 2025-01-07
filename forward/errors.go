@@ -14,5 +14,7 @@ const (
 	ErrInvalidPong      = Error("invalid PONG")
 	ErrInvalidNonce     = Error("invalid nonce")
 	ErrInvalidSharedKey = Error("invalid shared key")
+	ErrInvalidEntry     = Error("invalid entry")
+	ErrFailedConn       = Error("failed connection")
 	ErrFailedAuth       = Error("failed authentication")
 )
