@@ -297,3 +297,11 @@ func (r *Reader) Release(n int) {
 	// Resize the buffer to include only valid data
 	r.b.B = r.b.B[:r.n]
 }
+
+func (r *Reader) Peek(n int) (b []byte, err error) {
+	if err = r.fill(n); err != nil {
+		return
+	}
+
+	return r.b.B[r.n : r.n+n], nil
+}
