@@ -199,7 +199,7 @@ func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err 
 		return
 	}
 
-	if ts, err = s.r.ReadComplete(ts); err != nil {
+	if ts, err = s.r.ReadFull(ts); err != nil {
 		return
 	}
 
@@ -217,7 +217,7 @@ func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err 
 		return ErrInvalidEntry
 	}
 
-	if rec, err = s.r.ReadComplete(rec); err != nil {
+	if rec, err = s.r.ReadFull(rec); err != nil {
 		return
 	}
 
@@ -258,7 +258,7 @@ func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 			return ErrInvalidEntry
 		}
 
-		if rec, err = s.r.ReadComplete(rec); err != nil {
+		if rec, err = s.r.ReadFull(rec); err != nil {
 			return
 		}
 

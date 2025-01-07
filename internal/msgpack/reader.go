@@ -155,7 +155,7 @@ func (r *Reader) ReadHead() (v Value, err error) {
 	return
 }
 
-func (r *Reader) ReadComplete(v Value) (Value, error) {
+func (r *Reader) ReadFull(v Value) (Value, error) {
 	l := len(v)
 
 	if l > r.n {
@@ -184,7 +184,7 @@ func (r *Reader) ReadComplete(v Value) (Value, error) {
 			}
 
 			if typ := t.Type(); typ == types.Array || typ == types.Map {
-				if _, err := r.ReadComplete(t); err != nil {
+				if _, err := r.ReadFull(t); err != nil {
 					return v, err
 				}
 			}
