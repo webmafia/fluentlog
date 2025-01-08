@@ -28,91 +28,6 @@ func (s *ServerConn) Handle(fn func(*buffer.Buffer) error) (err error) {
 		return
 	}
 
-	// s.r.Release(0)
-
-	// for {
-	// 	// s.r.Release(0)
-
-	// 	arr, err := s.r.Read()
-
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	log.Println(arr.Type(), ":", arr.String())
-	// }
-
-	// -----------------------------------------------------------------------------------
-
-	// for {
-	// 	s.r.Release(0)
-
-	// 	arr, err := s.r.Read()
-
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	if arr.Type() != types.Array || arr.Len() < 2 || arr.Len() > 4 {
-	// 		return fmt.Errorf("unexpected array length: %d", arr.Len())
-	// 	}
-
-	// 	log.Println("array length received:", arr.Len())
-
-	// 	// Item 1: Tag
-	// 	tag, err := s.r.Read()
-
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	log.Println("tag received:", tag)
-
-	// 	// Should be either a binary (event stream), or a timestamp (single event)
-	// 	typ, err := s.r.PeekType()
-
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	log.Println("type:", typ)
-
-	// 	if typ == msgpack.TypeArray {
-	// 		return s.forward(tag, fn)
-	// 	}
-
-	// 	if typ == msgpack.TypeBinary {
-	// 		return s.packedForward(tag, fn)
-	// 	}
-
-	// 	// Item 2: Time
-	// 	if _, err = s.r.ReadTimestamp(); err != nil {
-	// 		return err
-	// 	}
-
-	// 	// Item 3: Record
-	// 	if err = s.r.SkipMap(); err != nil {
-	// 		return err
-	// 	}
-
-	// 	buf := s.serv.bufPool.Get()
-
-	// 	if _, err = buf.Write(s.r.ConsumedBuffer()); err != nil {
-	// 		return err
-	// 	}
-
-	// 	if err = fn(buf); err != nil {
-	// 		return err
-	// 	}
-
-	// 	// Item 4: Option
-	// 	if arrLen == 4 {
-	// 		if err = s.r.SkipMap(); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
-
 	return
 }
 
@@ -145,9 +60,8 @@ func (s *ServerConn) handshakePhase() (err error) {
 //   - PackedForward Mode (an array of messages sent as binary)
 //   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
 func (s *ServerConn) transportPhase() (err error) {
-	s.r.ResetReleasePoint()
-
 	for {
+		s.r.ResetReleasePoint()
 		s.r.Release()
 
 		var (
@@ -160,27 +74,33 @@ func (s *ServerConn) transportPhase() (err error) {
 			return err
 		}
 
-		arrLen := arr.Len()
+		evLen := arr.Len()
 
 		// Abort early if invalid data
-		if arr.Type() != types.Array || arrLen < 2 || arrLen > 4 {
-			return fmt.Errorf("unexpected array length: %d", arrLen)
+		if arr.Type() != types.Array || evLen < 2 || evLen > 4 {
+			return fmt.Errorf("unexpected array length: %d", evLen)
 		}
 
 		if tag, err = s.r.ReadStr(); err != nil {
 			return
 		}
 
+		s.r.SetReleasePoint()
+
 		if val, err = s.r.ReadHead(); err != nil {
 			return
 		}
 
+		evLen -= 2
+
 		switch val.Type() {
 
 		case types.Ext, types.Int, types.Uint:
-			if err = s.messageMode(tag, val, arrLen); err != nil {
+			if err = s.messageMode(tag, val, evLen); err != nil {
 				return
 			}
+
+			evLen--
 
 		case types.Array:
 			if err = s.forwardMode(tag, val); err != nil {
@@ -192,10 +112,18 @@ func (s *ServerConn) transportPhase() (err error) {
 				return
 			}
 
+		default:
+			return ErrInvalidEntry
+
+		}
+
+		// Optional options map
+		if evLen == 1 {
+			if err = s.ack(); err != nil {
+				return
+			}
 		}
 	}
-
-	return
 }
 
 // The Message Mode has the following format:
@@ -206,8 +134,8 @@ func (s *ServerConn) transportPhase() (err error) {
 //	  {"message": "bar"},       // 3. record
 //	  {"chunk": "<<UniqueId>>"} // 4. option (optional)
 //	]
-func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err error) {
-	if arrLen < 3 {
+func (s *ServerConn) messageMode(tag string, ts msgpack.Value, evLen int) (err error) {
+	if evLen < 1 {
 		return ErrInvalidEntry
 	}
 
@@ -231,12 +159,6 @@ func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err 
 
 	if rec, err = s.r.ReadFull(rec); err != nil {
 		return
-	}
-
-	if arrLen == 4 {
-		if _, err = s.r.Read(); err != nil {
-			return
-		}
 	}
 
 	return s.entry(tag, ts, rec)
@@ -371,104 +293,56 @@ func (s *ServerConn) entry(tag string, ts, rec msgpack.Value) (err error) {
 	return
 }
 
-// func (s *ServerConn) forward(tag string, fn func(*bytebufferpool.ByteBuffer) error) (err error) {
-// 	pos := s.r.Pos()
+func (s *ServerConn) ack() (err error) {
+	var m msgpack.Value
 
-// 	arrLen, err := s.r.ReadArrayHeader()
+	if m, err = s.r.Read(); err != nil {
+		return
+	}
 
-// 	if err != nil {
-// 		return
-// 	}
+	if m.Type() != types.Map {
+		return ErrInvalidEntry
+	}
 
-// 	log.Println("entries:", arrLen)
+	mapLen := m.Len()
+	s.r.ResetReleasePoint()
 
-// 	for range arrLen {
-// 		s.r.ReleaseAfter(pos)
+	var (
+		key string
+		val msgpack.Value
+	)
 
-// 		if err = s.forwardEntry(tag, fn); err != nil {
-// 			return
-// 		}
-// 	}
+	for range mapLen {
+		s.r.Release()
 
-// 	return
-// }
+		if key, err = s.r.ReadStr(); err != nil {
+			return
+		}
 
-// func (s *ServerConn) forwardEntry(tag string, fn func(*bytebufferpool.ByteBuffer) error) (err error) {
-// 	arrLen, err := s.r.ReadArrayHeader()
+		if val, err = s.r.Read(); err != nil {
+			return
+		}
 
-// 	if err != nil {
-// 		return err
-// 	}
+		if typ := val.Type(); typ == types.Array || typ == types.Map {
+			return ErrInvalidEntry
+		}
 
-// 	if arrLen != 2 {
-// 		return errors.New("invalid entry")
-// 	}
+		if key != "chunk" {
+			log.Println("skipped", key, "=", val)
+			continue
+		}
 
-// 	log.Println("still going strong")
+		chunk := val.Str()
+		s.w.WriteMapHeader(1)
+		s.w.WriteString("ack")
+		s.w.WriteString(chunk)
 
-// 	buf := s.serv.bufPool.Get()
-// 	buf.B = msgpack.AppendArray(buf.B, 3)
-// 	buf.B = msgpack.AppendString(buf.B, tag)
+		log.Println("ACK", chunk)
 
-// 	log.Println(buf.B)
+		if err = s.w.Flush(); err != nil {
+			return
+		}
+	}
 
-// 	v1, err := s.r.ReadRaw()
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	log.Println(v1)
-// 	log.Println(s.r.PeekType())
-
-// 	v2, err := s.r.ReadRaw()
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	log.Println(v2)
-
-// 	buf.B = append(buf.B, v1...)
-// 	buf.B = append(buf.B, v2...)
-
-// 	log.Println(buf.B)
-
-// 	return fn(buf)
-// }
-
-// func (s *ServerConn) packedForward(tag string, fn func(*bytebufferpool.ByteBuffer) error) (err error) {
-// 	binLen, err := s.r.SkipBinaryHeader()
-
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	pos := s.r.Pos()
-
-// 	gzipHead, err := s.r.PeekBytes(2)
-
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	if gzipHead[0] == 0x1f && gzipHead[1] == 0x8b {
-// 		return errors.New("compressed stream is not yet supported")
-// 	}
-
-// 	var read int
-
-// 	for read < binLen {
-// 		if err = s.r.ReleaseTo(pos); err != nil {
-// 			return err
-// 		}
-
-// 		if err = s.forwardEntry(tag, fn); err != nil {
-// 			return
-// 		}
-
-// 		read += s.r.Pos() - pos
-// 	}
-
-// 	return
-// }
+	return
+}
