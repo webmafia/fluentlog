@@ -2,6 +2,7 @@ package forward
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net"
 
@@ -17,6 +18,7 @@ type Server struct {
 type ServerOptions struct {
 	Address   string
 	Hostname  string
+	Tls       *tls.Config // E.g. from golang.org/x/crypto/acme/autocert
 	SharedKey func(clientHostname string) (sharedKey []byte, err error)
 }
 
@@ -45,6 +47,10 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 
 	if err != nil {
 		return
+	}
+
+	if s.opt.Tls != nil {
+		listener = tls.NewListener(listener, s.opt.Tls)
 	}
 
 	heartbeat, err := s.listenHeartbeat(ctx)
