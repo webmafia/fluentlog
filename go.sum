@@ -1,8 +1,2 @@
-github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IXrJmUc=
-github.com/klauspost/compress v1.17.11/go.mod h1:pMDklpSncoRMuLFrf1W9Ss9KT+0rH90U12bZKk7uwG0=
-github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
-github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
-github.com/webmafia/fast v0.12.0 h1:rhHIJ009K1LXxNh/wz0VFzoiM5QFOH/f/NOwE9k/2Bw=
-github.com/webmafia/fast v0.12.0/go.mod h1:MjWuDwKdCP1APS96wqOlQ9ZU5gqPmHfstQgDYGpG0pQ=
 github.com/webmafia/identifier v0.2.0 h1:0lI2CYM6rNE63R7wGYlghf83r9Qk0ACwAaDKs5v8x8E=
 github.com/webmafia/identifier v0.2.0/go.mod h1:WjuG3dg3q2AEFmAmiJR7qyAXjqbNnyuVc5aO7uBjFsg=
