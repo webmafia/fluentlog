@@ -272,8 +272,10 @@ func (r *Reader) grow(n int) (err error) {
 		return ErrLargeBuffer
 	}
 
-	buf := fast.MakeNoZero(c)[:len(r.b.B)]
-	r.migrateBuffer(buf)
+	log.Printf("--- GROWING: %d -> %d", cap(r.b.B), c)
+
+	buf := fast.MakeNoZeroCap(len(r.b.B), c)
+	copy(buf, r.b.B)
 	r.b.B = buf
 
 	return
@@ -311,44 +313,32 @@ func (r *Reader) Release(force ...bool) {
 }
 
 func (r *Reader) release() {
-	if r.n <= r.rp {
+
+	// If r.rp >= r.n, there's either no gap to release, or
+	// it's an invalid state we handle like "nothing to release".
+	if r.rp >= r.n {
 		return
 	}
 
-	log.Println("--- RELEASING ---")
+	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused", len(r.b.B), cap(r.b.B), r.rp, r.n-r.rp)
 
-	n := r.n - r.rp
+	// Move the unread portion (r.b[r.n:]) down to start at r.rp.
+	unreadLen := len(r.b.B) - r.n
 	copy(r.b.B[r.rp:], r.b.B[r.n:])
-	r.n -= n
-	r.b.B = r.b.B[:r.n]
-}
 
-func (r *Reader) migrateBuffer(buf []byte) {
-	log.Println("--- MIGRATING ---")
-	copy(buf, r.b.B)
-	// if r.n <= r.rp {
-	// 	copy(buf, r.b.B)
-	// } else {
-	// 	n := r.n - r.rp
+	// Adjust the read cursor: it now points to the start of the moved unread data.
+	r.n = r.rp
 
-	// 	if r.rp > 0 {
-	// 		copy(buf[:r.rp], r.b.B[:r.rp])
-	// 	}
-
-	// 	copy(buf[r.rp:], r.b.B[r.n:])
-	// 	r.n -= n
-	// 	r.b.B = r.b.B[:r.n]
-	// }
+	// Truncate the buffer so that it ends right after the moved unread data.
+	r.b.B = r.b.B[:r.rp+unreadLen]
 }
 
 func (r *Reader) shouldRelease() bool {
-	return true
 	unused := r.n - r.rp
-	total := len(r.b.B)
+	c := cap(r.b.B)
 
 	// Release only if:
-	return unused > (total/2) || // Unused data is significant
-		(total >= (r.max/2) && unused > 64) // Prevent releasing trivial unused data
+	return c >= 4096 && unused > (3*c/4) // Unused data is significant
 }
 
 func (r *Reader) Peek(n int) (b []byte, err error) {
