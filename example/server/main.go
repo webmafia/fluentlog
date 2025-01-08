@@ -21,13 +21,12 @@ func main() {
 
 func startServer(ctx context.Context) (err error) {
 	serv := forward.NewServer(forward.ServerOptions{
+		// Address: "localhost:24224",
+		Address:   "localhost:24284",
 		SharedKey: forward.SharedKey([]byte("secret")),
 	})
 
-	// addr := "localhost:24224"
-	addr := "localhost:24284"
-
-	return serv.Listen(ctx, addr, func(b *buffer.Buffer) error {
+	return serv.Listen(ctx, func(b *buffer.Buffer) error {
 		log.Println(b.String())
 		log.Println(b.Bytes())
 

@@ -15,6 +15,7 @@ type Server struct {
 }
 
 type ServerOptions struct {
+	Address   string
 	Hostname  string
 	SharedKey func(clientHostname string) (sharedKey []byte, err error)
 }
@@ -35,12 +36,18 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, addr string, fn func(*buffer.Buffer) error) (err error) {
+func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "tcp", addr)
+	listener, err := lc.Listen(ctx, "tcp", s.opt.Address)
+
+	if err != nil {
+		return
+	}
+
+	heartbeat, err := s.listenHeartbeat(ctx)
 
 	if err != nil {
 		return
@@ -48,11 +55,12 @@ func (s *Server) Listen(ctx context.Context, addr string, fn func(*buffer.Buffer
 
 	go func() {
 		<-ctx.Done()
+		heartbeat.Close()
 		listener.Close()
-		log.Println("Closed listener")
+		log.Println("Closed server")
 	}()
 
-	log.Println("Listening on", addr)
+	log.Println("Listening on", s.opt.Address)
 
 	for {
 		conn, err := listener.Accept()
