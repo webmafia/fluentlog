@@ -3,6 +3,7 @@ package msgpack
 import (
 	"bytes"
 	"io"
+	"log"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
@@ -314,6 +315,8 @@ func (r *Reader) release() {
 		return
 	}
 
+	log.Println("--- RELEASING ---")
+
 	n := r.n - r.rp
 	copy(r.b.B[r.rp:], r.b.B[r.n:])
 	r.n -= n
@@ -321,22 +324,25 @@ func (r *Reader) release() {
 }
 
 func (r *Reader) migrateBuffer(buf []byte) {
-	if r.n <= r.rp {
-		copy(buf, r.b.B)
-	} else {
-		n := r.n - r.rp
+	log.Println("--- MIGRATING ---")
+	copy(buf, r.b.B)
+	// if r.n <= r.rp {
+	// 	copy(buf, r.b.B)
+	// } else {
+	// 	n := r.n - r.rp
 
-		if r.rp > 0 {
-			copy(buf[:r.rp], r.b.B[:r.rp])
-		}
+	// 	if r.rp > 0 {
+	// 		copy(buf[:r.rp], r.b.B[:r.rp])
+	// 	}
 
-		copy(buf[r.rp:], r.b.B[r.n:])
-		r.n -= n
-		r.b.B = r.b.B[:r.n]
-	}
+	// 	copy(buf[r.rp:], r.b.B[r.n:])
+	// 	r.n -= n
+	// 	r.b.B = r.b.B[:r.n]
+	// }
 }
 
 func (r *Reader) shouldRelease() bool {
+	return true
 	unused := r.n - r.rp
 	total := len(r.b.B)
 

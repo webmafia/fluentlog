@@ -145,9 +145,9 @@ func (s *ServerConn) handshakePhase() (err error) {
 //   - PackedForward Mode (an array of messages sent as binary)
 //   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
 func (s *ServerConn) transportPhase() (err error) {
-	for {
-		// Todo: Release buffer
+	s.r.Release(true)
 
+	for {
 		var (
 			arr msgpack.Value
 			tag string
@@ -166,6 +166,8 @@ func (s *ServerConn) transportPhase() (err error) {
 		if tag, err = s.r.ReadStr(); err != nil {
 			return
 		}
+
+		s.r.SetReleasePoint()
 
 		if val, err = s.r.ReadHead(); err != nil {
 			return
@@ -195,6 +197,8 @@ func (s *ServerConn) transportPhase() (err error) {
 }
 
 func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err error) {
+	s.r.Release()
+
 	if arrLen < 3 || arrLen > 4 {
 		return
 	}
@@ -238,6 +242,8 @@ func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 	)
 
 	for range arr.Len() {
+		s.r.Release()
+
 		if entry, err = s.r.Read(); err != nil {
 			return
 		}
