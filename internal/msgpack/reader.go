@@ -320,7 +320,7 @@ func (r *Reader) release() {
 		return
 	}
 
-	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused", len(r.b.B), cap(r.b.B), r.rp, r.n-r.rp)
+	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused\n", len(r.b.B), cap(r.b.B), r.rp, r.n-r.rp)
 
 	// Move the unread portion (r.b[r.n:]) down to start at r.rp.
 	unreadLen := len(r.b.B) - r.n

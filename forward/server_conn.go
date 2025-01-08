@@ -146,7 +146,6 @@ func (s *ServerConn) handshakePhase() (err error) {
 //   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
 func (s *ServerConn) transportPhase() (err error) {
 	s.r.ResetReleasePoint()
-	s.r.Release()
 
 	for {
 		s.r.Release()
@@ -161,9 +160,11 @@ func (s *ServerConn) transportPhase() (err error) {
 			return err
 		}
 
+		arrLen := arr.Len()
+
 		// Abort early if invalid data
-		if arr.Type() != types.Array || arr.Len() < 2 || arr.Len() > 4 {
-			return fmt.Errorf("unexpected array length: %d", arr.Len())
+		if arr.Type() != types.Array || arrLen < 2 || arrLen > 4 {
+			return fmt.Errorf("unexpected array length: %d", arrLen)
 		}
 
 		if tag, err = s.r.ReadStr(); err != nil {
@@ -176,6 +177,11 @@ func (s *ServerConn) transportPhase() (err error) {
 
 		switch val.Type() {
 
+		case types.Ext, types.Int, types.Uint:
+			if err = s.messageMode(tag, val, arrLen); err != nil {
+				return
+			}
+
 		case types.Array:
 			if err = s.forwardMode(tag, val); err != nil {
 				return
@@ -186,20 +192,23 @@ func (s *ServerConn) transportPhase() (err error) {
 				return
 			}
 
-		default:
-			if err = s.messageMode(tag, val, arr.Len()); err != nil {
-				return
-			}
-
 		}
 	}
 
 	return
 }
 
+// The Message Mode has the following format:
+//
+//	[
+//	  "tag.name",               // 1. tag
+//	  1441588984,               // 2. time
+//	  {"message": "bar"},       // 3. record
+//	  {"chunk": "<<UniqueId>>"} // 4. option (optional)
+//	]
 func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err error) {
-	if arrLen < 3 || arrLen > 4 {
-		return
+	if arrLen < 3 {
+		return ErrInvalidEntry
 	}
 
 	if ts, err = s.r.ReadFull(ts); err != nil {
@@ -233,6 +242,17 @@ func (s *ServerConn) messageMode(tag string, ts msgpack.Value, arrLen int) (err 
 	return s.entry(tag, ts, rec)
 }
 
+// The Forward Mode has the following format:
+//
+//	[
+//	  "tag.name",                         // 1. tag
+//	  [                                   // 2. array of entries
+//	    [1441588984, {"message": "foo"}],
+//	    [1441588985, {"message": "bar"}],
+//	    [1441588986, {"message": "baz"}]
+//	  ],
+//	  {"chunk": "<<UniqueId>>"}           // 3. options (optional)
+//	]
 func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 	var (
 		entry msgpack.Value
@@ -240,7 +260,9 @@ func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 		rec   msgpack.Value
 	)
 
-	for range arr.Len() {
+	arrLen := arr.Len()
+
+	for range arrLen {
 		s.r.Release()
 
 		if entry, err = s.r.Read(); err != nil {
@@ -275,6 +297,13 @@ func (s *ServerConn) forwardMode(tag string, arr msgpack.Value) (err error) {
 	return
 }
 
+// The PackedForward Mode has the following format:
+//
+//	[
+//	  "tag.name",                   // 1. tag
+//	  "<<MessagePackEventStream>>", // 2. binary (bin) field of concatenated entries
+//	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
+//	]
 func (s *ServerConn) packedForwardMode(tag string, v msgpack.Value) (err error) {
 	gzip, err := s.isGzip()
 
@@ -309,6 +338,17 @@ func (s *ServerConn) packedForwardMode(tag string, v msgpack.Value) (err error) 
 	return
 }
 
+// The CompressedPackedForward Mode has the following format:
+//
+//	[
+//	  "tag.name",                                     // 1. tag
+//	  "<<CompressedMessagePackEventStream>>",         // 2. binary (bin) field of concatenated entries
+//	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
+//	]
+func (s *ServerConn) compressedPackedForwardMode(tag string, bin msgpack.Value) (err error) {
+	return fmt.Errorf("%w: compressed (gzip) stream", ErrNotSupported)
+}
+
 func (s *ServerConn) isGzip() (ok bool, err error) {
 	magicNumbers, err := s.r.Peek(3)
 
@@ -321,10 +361,6 @@ func (s *ServerConn) isGzip() (ok bool, err error) {
 		magicNumbers[2] == 8)
 
 	return
-}
-
-func (s *ServerConn) compressedPackedForwardMode(tag string, bin msgpack.Value) (err error) {
-	return fmt.Errorf("%w: compressed (gzip) stream", ErrNotSupported)
 }
 
 func (s *ServerConn) entry(tag string, ts, rec msgpack.Value) (err error) {
