@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
@@ -17,8 +18,19 @@ type ServerConn struct {
 	w    msgpack.Writer
 }
 
+func (s *ServerConn) String() string {
+	_, port, _ := strings.Cut(s.conn.RemoteAddr().String(), ":")
+	return port
+}
+
+func (s *ServerConn) log(str string, args ...any) {
+	log.Println("client", s.String(), "|", fmt.Sprintf(str, args...))
+}
+
 func (s *ServerConn) Handle(fn func(*buffer.Buffer) error) (err error) {
 	defer s.conn.Close()
+
+	s.log("connected")
 
 	if err = s.handshakePhase(); err != nil {
 		return
@@ -49,7 +61,7 @@ func (s *ServerConn) handshakePhase() (err error) {
 		return
 	}
 
-	log.Println("server: client connected!")
+	s.log("authenticated")
 
 	return
 }
@@ -328,7 +340,7 @@ func (s *ServerConn) ack() (err error) {
 		}
 
 		if key != "chunk" {
-			log.Println("skipped", key, "=", val)
+			// log.Println("skipped", key, "=", val)
 			continue
 		}
 
@@ -337,7 +349,7 @@ func (s *ServerConn) ack() (err error) {
 		s.w.WriteString("ack")
 		s.w.WriteString(chunk)
 
-		log.Println("ACK", chunk)
+		s.log("ack %s", chunk)
 
 		if err = s.w.Flush(); err != nil {
 			return

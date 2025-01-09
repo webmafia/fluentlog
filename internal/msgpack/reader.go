@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"unsafe"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
@@ -272,9 +273,8 @@ func (r *Reader) grow(n int) (err error) {
 		return ErrLargeBuffer
 	}
 
-	log.Printf("--- GROWING: %d -> %d", cap(r.b.B), c)
-
 	buf := fast.MakeNoZeroCap(len(r.b.B), c)
+	log.Printf("--- GROWING: %d -> %d (%d -> %d)", cap(r.b.B), c, *(*uintptr)(unsafe.Pointer(&r.b.B)), *(*uintptr)(unsafe.Pointer(&buf)))
 	copy(buf, r.b.B)
 	r.b.B = buf
 
