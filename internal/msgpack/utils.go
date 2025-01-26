@@ -53,6 +53,7 @@ func uintFromBuf[T Unsigned](buf []byte) T {
 	}
 }
 
+// floatFromBuf converts a byte slice to a floating point value value based on its length.
 func floatFromBuf[T Float](buf []byte) T {
 	switch len(buf) {
 	case 4:
@@ -64,6 +65,7 @@ func floatFromBuf[T Float](buf []byte) T {
 	}
 }
 
+// roundPow rounds to the next power of 2
 // From: https://github.com/webmafia/fast
 func roundPow(n int) int {
 	if n <= 1 {
