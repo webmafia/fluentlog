@@ -1,7 +1,7 @@
 package msgpack
 
 import (
-	"encoding/binary"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -38,214 +38,123 @@ func (iter *Iterator) Error() error {
 	return iter.err
 }
 
-func (r *Iterator) Reset(reader io.Reader) {
-	r.b.Reset()
-	r.r = reader
-	r.n = 0
-	r.t = 0
+func (iter *Iterator) Reset(reader io.Reader) {
+	iter.r = reader
+	iter.reset()
+}
+
+func (iter *Iterator) ResetBytes(b []byte) {
+	if br, ok := iter.r.(*bytes.Reader); ok {
+		br.Reset(b)
+	} else {
+		iter.r = bytes.NewReader(b)
+	}
+
+	iter.reset()
+}
+
+func (iter *Iterator) reset() {
+	iter.b.Reset()
+	iter.n = 0
+	iter.t = 0
 }
 
 // Read next token. Must be called before any Read* method.
-func (iter *Iterator) Next() (typ types.Type, length int) {
+func (iter *Iterator) Next() bool {
 	iter.t = iter.n
 
 	if !iter.fill(1) {
-		return
+		return false
 	}
 
-	typ, length, isValueLength := types.Get(iter.b.B[iter.n])
+	typ, length, isValueLength := types.Get(iter.b.B[iter.t])
 	iter.consume(1)
 
 	if !isValueLength {
-		pos := iter.n
-
 		if !iter.fill(length) {
-			return
+			return false
 		}
 
 		iter.consume(length)
-		length = int(uintFromBuf[uint](iter.b.B[pos:iter.n]))
+		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
 	}
 
-	return
-}
-
-func (iter *Iterator) ReadBinary() []byte {
-	typ, length := iter.typLen()
-
-	if typ == types.Array || typ == types.Map {
-		return nil
-	}
-
-	if !iter.fill(length) {
-		return nil
-	}
-
-	return iter.bytes(length)
-}
-
-func (iter *Iterator) ReadString() string {
-	typ, length := iter.typLen()
-
-	if typ == types.Array || typ == types.Map {
-		return ""
-	}
-
-	if !iter.fill(length) {
-		return ""
-	}
-
-	return fast.BytesToString(iter.bytes(length))
-}
-
-func (iter *Iterator) bytes(n int) []byte {
-	pos := iter.n
-	iter.consume(n)
-
-	return iter.b.B[pos : pos+n]
-}
-
-func (iter *Iterator) ReadBool() bool {
-	return iter.b.B[iter.t] == 0xc3
-}
-
-func (iter *Iterator) ReadFloat() float64 {
-	_, length := iter.typLen()
-
-	if !iter.fill(length) {
-		return 0
-	}
-
-	return floatFromBuf[float64](iter.bytes(length))
-}
-
-func (iter *Iterator) ReadInt() int {
-	c := iter.b.B[iter.t]
-	typ, length := iter.typLen()
-
-	if !iter.fill(length) {
-		return 0
-	}
-
-	switch typ {
-	case types.Int:
-		if length == 0 && c >= 0xe0 {
-			return intFromBuf[int]([]byte{c})
+	if typ != types.Array && typ != types.Map {
+		if !iter.fill(length) {
+			return false
 		}
 
-		return intFromBuf[int](iter.bytes(length))
-
-	case types.Uint:
-		if length == 0 && c <= 0x7f {
-			return intFromBuf[int]([]byte{c})
-		}
-
-		return int(uintFromBuf[uint](iter.bytes(length)))
+		iter.consume(length)
 	}
 
-	return 0
+	return true
 }
 
-func (iter *Iterator) ReadUint() uint {
-	c := iter.b.B[iter.t]
-	typ, length := iter.typLen()
-
-	if !iter.fill(length) {
-		return 0
-	}
-
-	switch typ {
-	case types.Int:
-		if length == 0 && c >= 0xe0 {
-			return uint(intFromBuf[int]([]byte{c}))
-		}
-
-		return uint(intFromBuf[int](iter.bytes(length)))
-
-	case types.Uint:
-		if length == 0 && c <= 0x7f {
-			return uintFromBuf[uint]([]byte{c})
-		}
-
-		return uintFromBuf[uint](iter.bytes(length))
-	}
-
-	return 0
+func (iter *Iterator) Type() types.Type {
+	typ, _, _ := types.Get(iter.b.B[iter.t])
+	return typ
 }
 
-func (iter *Iterator) ReadTime() time.Time {
-	c := iter.b.B[iter.t]
-	_, length := iter.typLen()
-
-	if !iter.fill(length) {
-		return time.Time{}
-	}
-
-	src := iter.bytes(length)
-
-	var offset, s, ns int64
-
-	switch c {
-
-	case 0xd6: // Ts32
-		if h := src[offset]; h != msgpackTimestamp {
-			iter.reportError("ReadTime", expectedExtType(h, msgpackTimestamp))
-			return time.Time{}
-		}
-
-		offset++
-
-		s = int64(binary.BigEndian.Uint32(src[offset : offset+4]))
-
-	case 0xd7: // Ts64 or Forward EventTime
-		h := src[offset]
-		offset++
-
-		if h == msgpackTimestamp {
-			// Read the combined 64-bit value
-			combined := binary.BigEndian.Uint64(src[offset:])
-
-			// Extract nanoseconds (lower 30 bits)
-			ns = int64(combined & 0x3FFFFFFF)
-
-			// Extract seconds (upper 34 bits)
-			s = int64(combined >> 30)
-
-		} else if h == fluentdEventTime {
-			s = int64(int32(binary.BigEndian.Uint32(src[offset : offset+4])))
-			ns = int64(int32(binary.BigEndian.Uint32(src[offset+4 : offset+8])))
-
-		} else {
-			iter.reportError("ReadTime", expectedExtType(h, msgpackTimestamp))
-			return time.Time{}
-		}
-
-	case 0xc7: // ext8
-		h := src[offset]
-		offset++
-
-		if h == msgpackTimestamp {
-			ns = int64(binary.BigEndian.Uint32(src[offset : offset+4]))
-			s = int64(binary.BigEndian.Uint64(src[offset+4 : offset+12]))
-
-		} else if h == fluentdEventTime {
-			s = int64(int32(binary.BigEndian.Uint32(src[offset : offset+4])))
-			ns = int64(int32(binary.BigEndian.Uint32(src[offset+4 : offset+8])))
-
-		} else {
-			iter.reportError("ReadTime", expectedExtType(h, msgpackTimestamp))
-			return time.Time{}
-		}
-
-	default:
-		s = int64(iter.ReadInt())
-	}
-
-	return time.Unix(s, ns)
+func (iter *Iterator) IsCollection() bool {
+	typ := iter.Type()
+	return typ == types.Array || typ == types.Map
 }
 
-func (iter *Iterator) Skip() bool {
-	typ, length := iter.typLen()
+func (iter *Iterator) Len() int {
+	_, length, isValueLength := types.Get(iter.b.B[iter.t])
+
+	if !isValueLength {
+		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
+	}
+
+	return length
+}
+
+func (iter *Iterator) Bin() []byte {
+	v, _, _ := ReadBinary(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Str() string {
+	v, _, _ := ReadString(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Bool() bool {
+	v, _, _ := ReadBool(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Float() float64 {
+	v, _, _ := ReadFloat(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Int() int64 {
+	v, _, _ := ReadInt(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Uint() uint64 {
+	v, _, _ := ReadUint(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Time() time.Time {
+	v, _, _ := ReadTimestamp(iter.b.B, iter.t)
+	return v
+}
+
+func (iter *Iterator) Value() Value {
+	return Value(iter.b.B[iter.t:iter.n])
+}
+
+func (iter *Iterator) Skip() {
+	typ, length, isValueLength := types.Get(iter.b.B[iter.t])
+
+	if !isValueLength {
+		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
+	}
 
 	switch typ {
 
@@ -256,57 +165,15 @@ func (iter *Iterator) Skip() bool {
 		length *= 2
 
 	default:
-		return iter.skipBytes(length)
+		return
 
 	}
 
 	for range length {
 		iter.Next()
-
-		if !iter.Skip() {
-			return false
-		}
+		iter.Skip()
 	}
-
-	return true
 }
-
-func (r *Iterator) skipBytes(n int) bool {
-	l := len(r.b.B)
-	pos := r.n + n
-
-	if pos < l {
-		r.n = pos
-	} else {
-		r.n = l
-		n = pos - l
-
-		if err := skipBytes(r.r, n); err != nil {
-			return r.reportError("skipBytes", err)
-		}
-	}
-
-	return true
-}
-
-func (iter *Iterator) typLen() (typ types.Type, length int) {
-	typ, length, isValueLength := types.Get(iter.b.B[iter.t])
-
-	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
-	}
-
-	// iter.t = iter.n
-	return
-}
-
-// TODO
-// func (iter *Iterator) AppendTo(v []byte) []byte {
-// 	typ, length := iter.typLen()
-
-// 	v = append(v, iter.b.B[iter.t:iter.n]...)
-
-// }
 
 // Ensures that there is at least n bytes of data in buffer
 func (r *Iterator) fill(n int) bool {
@@ -359,7 +226,6 @@ func (r *Iterator) fillFromReader(n int) bool {
 	}
 
 	if n > 0 {
-		r.err = io.ErrUnexpectedEOF
 		return false
 	}
 
