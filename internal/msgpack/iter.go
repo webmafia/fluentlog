@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/webmafia/fast"
@@ -181,12 +180,7 @@ func (iter *Iterator) Skip() {
 
 // Ensures that there is at least n bytes of data in buffer
 func (r *Iterator) fill(n int) bool {
-	if n == 0 {
-		return true
-	}
-
-	l := len(r.buf)
-	n -= (l - r.n)
+	n -= (len(r.buf) - r.n)
 
 	if n <= 0 {
 		return true
@@ -267,11 +261,6 @@ func (r *Iterator) consume(n int) {
 	r.tot += n
 }
 
-// Get current read position
-// func (r *Iterator) Pos() int {
-// 	return r.n
-// }
-
 // Get total bytes read
 func (r *Iterator) Total() int {
 	return r.tot
@@ -301,8 +290,6 @@ func (r *Iterator) release() {
 		return
 	}
 
-	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused\n", len(r.buf), cap(r.buf), r.rp, r.n-r.rp)
-
 	// Move the unread portion (r.b[r.n:]) down to start at r.rp.
 	unreadLen := len(r.buf) - r.n
 	copy(r.buf[r.rp:], r.buf[r.n:])
@@ -321,14 +308,6 @@ func (r *Iterator) shouldRelease() bool {
 	// Release only if:
 	return c >= 4096 && unused > (3*c/4) // Unused data is significant
 }
-
-// func (r *Iterator) Peek(n int) (b []byte, err error) {
-// 	if err = r.fill(n); err != nil {
-// 		return
-// 	}
-
-// 	return r.buf[r.n : r.n+n], nil
-// }
 
 func (iter *Iterator) reportError(op string, err any) bool {
 	if iter.err != nil {
