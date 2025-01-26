@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/webmafia/fast/buffer"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.
@@ -55,9 +54,9 @@ func Example_buildComplexMessage() {
 	for iter.Next() {
 		fmt.Println(iter.Value())
 
-		if iter.Type() == types.Array {
-			iter.Skip()
-		}
+		// if iter.Type() == types.Array {
+		// 	iter.Skip()
+		// }
 	}
 
 	fmt.Println(iter.Error())
@@ -86,4 +85,19 @@ func BenchmarkIterator(b *testing.B) {
 	}
 
 	b.ReportMetric(float64(b.Elapsed())/float64(i)/float64(b.N), "ns/field")
+}
+
+func BenchmarkIterator_Skip(b *testing.B) {
+	msg := buildComplexMessage()
+	iter := NewIterator(bytes.NewReader(msg), buffer.NewBuffer(4096), 4096)
+
+	b.ResetTimer()
+
+	for range b.N {
+		iter.ResetBytes(msg)
+
+		for iter.Next() {
+			iter.Skip()
+		}
+	}
 }

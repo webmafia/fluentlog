@@ -170,7 +170,10 @@ func (iter *Iterator) Skip() {
 	}
 
 	for range length {
-		iter.Next()
+		if !iter.Next() {
+			break
+		}
+
 		iter.Skip()
 	}
 }
