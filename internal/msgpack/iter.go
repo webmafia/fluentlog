@@ -6,32 +6,33 @@ import (
 	"io"
 	"log"
 	"time"
-	"unsafe"
 
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 type Iterator struct {
-	b   *buffer.Buffer // Buffer
-	r   io.Reader      // Origin
-	t   int            // Token start
-	n   int            // Cursor position
-	tot int            // Total read bytes
-	max int            // Max size of buffer
-	rp  int            // Release point
+	buf []byte    // Buffer
+	r   io.Reader // Origin
+	t   int       // Token start
+	n   int       // Cursor position
+	tot int       // Total read bytes
+	max int       // Max size of buffer
+	rp  int       // Release point
 	err error
 }
 
-func NewIterator(r io.Reader, buf *buffer.Buffer, maxBuf int) Iterator {
-	buf.Reset()
-
-	return Iterator{
-		b:   buf,
+func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
+	iter := Iterator{
 		r:   r,
-		max: maxBuf,
+		max: 4096,
 	}
+
+	if len(maxBufSize) > 0 {
+		iter.max = maxBufSize[0]
+	}
+
+	return iter
 }
 
 func (iter *Iterator) Error() error {
@@ -54,7 +55,7 @@ func (iter *Iterator) ResetBytes(b []byte) {
 }
 
 func (iter *Iterator) reset() {
-	iter.b.Reset()
+	iter.buf = iter.buf[:0]
 	iter.n = 0
 	iter.t = 0
 }
@@ -67,7 +68,7 @@ func (iter *Iterator) Next() bool {
 		return false
 	}
 
-	typ, length, isValueLength := types.Get(iter.b.B[iter.t])
+	typ, length, isValueLength := types.Get(iter.buf[iter.t])
 	iter.consume(1)
 
 	if !isValueLength {
@@ -76,7 +77,7 @@ func (iter *Iterator) Next() bool {
 		}
 
 		iter.consume(length)
-		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
+		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
 	}
 
 	if typ != types.Array && typ != types.Map {
@@ -91,7 +92,7 @@ func (iter *Iterator) Next() bool {
 }
 
 func (iter *Iterator) Type() types.Type {
-	typ, _, _ := types.Get(iter.b.B[iter.t])
+	typ, _, _ := types.Get(iter.buf[iter.t])
 	return typ
 }
 
@@ -101,59 +102,59 @@ func (iter *Iterator) IsCollection() bool {
 }
 
 func (iter *Iterator) Len() int {
-	_, length, isValueLength := types.Get(iter.b.B[iter.t])
+	_, length, isValueLength := types.Get(iter.buf[iter.t])
 
 	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
+		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
 	}
 
 	return length
 }
 
 func (iter *Iterator) Bin() []byte {
-	v, _, _ := ReadBinary(iter.b.B, iter.t)
+	v, _, _ := ReadBinary(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Str() string {
-	v, _, _ := ReadString(iter.b.B, iter.t)
+	v, _, _ := ReadString(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Bool() bool {
-	v, _, _ := ReadBool(iter.b.B, iter.t)
+	v, _, _ := ReadBool(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Float() float64 {
-	v, _, _ := ReadFloat(iter.b.B, iter.t)
+	v, _, _ := ReadFloat(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Int() int64 {
-	v, _, _ := ReadInt(iter.b.B, iter.t)
+	v, _, _ := ReadInt(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Uint() uint64 {
-	v, _, _ := ReadUint(iter.b.B, iter.t)
+	v, _, _ := ReadUint(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Time() time.Time {
-	v, _, _ := ReadTimestamp(iter.b.B, iter.t)
+	v, _, _ := ReadTimestamp(iter.buf, iter.t)
 	return v
 }
 
 func (iter *Iterator) Value() Value {
-	return Value(iter.b.B[iter.t:iter.n])
+	return Value(iter.buf[iter.t:iter.n])
 }
 
 func (iter *Iterator) Skip() {
-	typ, length, isValueLength := types.Get(iter.b.B[iter.t])
+	typ, length, isValueLength := types.Get(iter.buf[iter.t])
 
 	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.b.B[iter.t+1 : iter.n]))
+		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
 	}
 
 	switch typ {
@@ -184,7 +185,7 @@ func (r *Iterator) fill(n int) bool {
 		return true
 	}
 
-	l := len(r.b.B)
+	l := len(r.buf)
 	n -= (l - r.n)
 
 	if n <= 0 {
@@ -199,20 +200,20 @@ func (r *Iterator) fillFromReader(n int) bool {
 		return false
 	}
 
-	readOffset := len(r.b.B) // Start reading from the current end of valid data
+	readOffset := len(r.buf) // Start reading from the current end of valid data
 
 	if !r.grow(n) {
 		return false
 	}
 
-	r.b.B = r.b.B[:cap(r.b.B)] // Expand buffer to its full capacity
+	r.buf = r.buf[:cap(r.buf)] // Expand buffer to its full capacity
 
 	var err error
 
 	for n > 0 {
 		// Read data from the io.Reader
 		var bytesRead int
-		bytesRead, err = r.r.Read(r.b.B[readOffset:])
+		bytesRead, err = r.r.Read(r.buf[readOffset:])
 
 		if bytesRead > 0 {
 			readOffset += bytesRead
@@ -233,17 +234,17 @@ func (r *Iterator) fillFromReader(n int) bool {
 	}
 
 	// Adjust buffer size to include only valid data
-	r.b.B = r.b.B[:readOffset]
+	r.buf = r.buf[:readOffset]
 	return true
 }
 
 // grow copies the buffer to a new, larger buffer so that there are at least n
 // bytes of capacity beyond len(b.buf).
 func (r *Iterator) grow(n int) bool {
-	need := len(r.b.B) + n
+	need := len(r.buf) + n
 
 	// There is already enough capacity
-	if need <= cap(r.b.B) {
+	if need <= cap(r.buf) {
 		return true
 	}
 
@@ -254,10 +255,9 @@ func (r *Iterator) grow(n int) bool {
 		return r.reportError("grow", ErrLargeBuffer)
 	}
 
-	buf := fast.MakeNoZeroCap(len(r.b.B), c)
-	log.Printf("--- GROWING: %d -> %d (%d -> %d)", cap(r.b.B), c, *(*uintptr)(unsafe.Pointer(&r.b.B)), *(*uintptr)(unsafe.Pointer(&buf)))
-	copy(buf, r.b.B)
-	r.b.B = buf
+	buf := fast.MakeNoZeroCap(len(r.buf), c)
+	copy(buf, r.buf)
+	r.buf = buf
 
 	return true
 }
@@ -301,22 +301,22 @@ func (r *Iterator) release() {
 		return
 	}
 
-	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused\n", len(r.b.B), cap(r.b.B), r.rp, r.n-r.rp)
+	log.Printf("--- RELEASING: %d/%d, whereof %d reserved and %d unused\n", len(r.buf), cap(r.buf), r.rp, r.n-r.rp)
 
 	// Move the unread portion (r.b[r.n:]) down to start at r.rp.
-	unreadLen := len(r.b.B) - r.n
-	copy(r.b.B[r.rp:], r.b.B[r.n:])
+	unreadLen := len(r.buf) - r.n
+	copy(r.buf[r.rp:], r.buf[r.n:])
 
 	// Adjust the read cursor: it now points to the start of the moved unread data.
 	r.n = r.rp
 
 	// Truncate the buffer so that it ends right after the moved unread data.
-	r.b.B = r.b.B[:r.rp+unreadLen]
+	r.buf = r.buf[:r.rp+unreadLen]
 }
 
 func (r *Iterator) shouldRelease() bool {
 	unused := r.n - r.rp
-	c := cap(r.b.B)
+	c := cap(r.buf)
 
 	// Release only if:
 	return c >= 4096 && unused > (3*c/4) // Unused data is significant
@@ -327,7 +327,7 @@ func (r *Iterator) shouldRelease() bool {
 // 		return
 // 	}
 
-// 	return r.b.B[r.n : r.n+n], nil
+// 	return r.buf[r.n : r.n+n], nil
 // }
 
 func (iter *Iterator) reportError(op string, err any) bool {

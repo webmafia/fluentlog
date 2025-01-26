@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
-
-	"github.com/webmafia/fast/buffer"
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.
@@ -49,7 +47,7 @@ func Example_buildComplexMessage() {
 	fmt.Println("---")
 
 	r := bytes.NewReader(data)
-	iter := NewIterator(r, buffer.NewBuffer(4096), 4096)
+	iter := NewIterator(r)
 
 	for iter.Next() {
 		fmt.Println(iter.Value())
@@ -68,7 +66,7 @@ func Example_buildComplexMessage() {
 
 func BenchmarkIterator(b *testing.B) {
 	msg := buildComplexMessage()
-	iter := NewIterator(bytes.NewReader(msg), buffer.NewBuffer(4096), 4096)
+	iter := NewIterator(bytes.NewReader(msg))
 
 	b.ResetTimer()
 
@@ -89,7 +87,7 @@ func BenchmarkIterator(b *testing.B) {
 
 func BenchmarkIterator_Skip(b *testing.B) {
 	msg := buildComplexMessage()
-	iter := NewIterator(bytes.NewReader(msg), buffer.NewBuffer(4096), 4096)
+	iter := NewIterator(bytes.NewReader(msg))
 
 	b.ResetTimer()
 
