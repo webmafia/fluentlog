@@ -11,17 +11,18 @@ import (
 )
 
 type Iterator struct {
-	buf   []byte    // Buffer
-	r     io.Reader // Origin
-	t0    int       // Token head start
-	t1    int       // Token value start
-	t2    int       // Token value end
-	items int       // Number of array/map items
-	n     int       // Cursor position
-	tot   int       // Total read bytes
-	max   int       // Max size of buffer
-	rp    int       // Release point
-	err   error
+	buf    []byte    // Buffer
+	r      io.Reader // Origin
+	t0     int       // Token head start
+	t1     int       // Token value start
+	t2     int       // Token value end
+	items  int       // Number of array/map items
+	n      int       // Cursor position
+	tot    int       // Total read bytes
+	remain int       // Remaining bytes to read (only used in BinReader)
+	max    int       // Max size of buffer
+	rp     int       // Release point
+	err    error
 }
 
 func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
@@ -62,6 +63,7 @@ func (iter *Iterator) reset() {
 	iter.t0 = 0
 	iter.t1 = 0
 	iter.t2 = 0
+	iter.remain = 0
 }
 
 // Read next token. Must be called before any Read* method.
@@ -72,6 +74,7 @@ func (iter *Iterator) Next() bool {
 		}
 	}
 
+	iter.remain = 0
 	iter.t0 = iter.n
 
 	if !iter.fill(1) {
@@ -146,6 +149,11 @@ func (iter *Iterator) Bin() []byte {
 	}
 
 	return iter.buf[iter.t1:iter.t2]
+}
+
+func (iter *Iterator) BinReader() io.Reader {
+	iter.remain = iter.Len()
+	return binReader{iter: iter}
 }
 
 func (iter *Iterator) Str() string {
@@ -297,7 +305,7 @@ func (r *Iterator) grow(n int) bool {
 	c := min(r.max, max(64, roundPow(need)))
 
 	if c < need {
-		return r.reportError("grow", ErrLargeBuffer)
+		return r.reportError("grow", ErrReachedMaxBufferSize)
 	}
 
 	buf := fast.MakeNoZeroCap(len(r.buf), c)
@@ -333,23 +341,39 @@ func (r *Iterator) Release(force ...bool) {
 	}
 }
 
-func (r *Iterator) release() {
-
-	// If r.rp >= r.n, there's either no gap to release, or
-	// it's an invalid state we handle like "nothing to release".
-	if r.rp >= r.n {
+func (iter *Iterator) release() {
+	// If there's nothing to release, return early
+	if iter.rp >= iter.n {
 		return
 	}
 
-	// Move the unread portion (r.b[r.n:]) down to start at r.rp.
-	unreadLen := len(r.buf) - r.n
-	copy(r.buf[r.rp:], r.buf[r.n:])
+	// Calculate the unread portion of the buffer
+	unreadLen := len(iter.buf) - iter.n
+	copy(iter.buf[iter.rp:], iter.buf[iter.n:])
 
-	// Adjust the read cursor: it now points to the start of the moved unread data.
-	r.n = r.rp
+	// Adjust cursor and buffer
+	shift := iter.n - iter.rp
+	iter.n = iter.rp
+	iter.buf = iter.buf[:iter.rp+unreadLen]
 
-	// Truncate the buffer so that it ends right after the moved unread data.
-	r.buf = r.buf[:r.rp+unreadLen]
+	// Adjust token markers
+	if iter.t0 >= iter.rp {
+		iter.t0 -= shift
+	} else {
+		iter.t0 = 0 // Invalidate t0
+	}
+
+	if iter.t1 >= iter.rp {
+		iter.t1 -= shift
+	} else {
+		iter.t1 = 0 // Invalidate t1
+	}
+
+	if iter.t2 >= iter.rp {
+		iter.t2 -= shift
+	} else {
+		iter.t2 = 0 // Invalidate t2
+	}
 }
 
 func (r *Iterator) shouldRelease() bool {
@@ -361,7 +385,7 @@ func (r *Iterator) shouldRelease() bool {
 }
 
 func (iter *Iterator) reportError(op string, err any) bool {
-	if iter.err != nil {
+	if iter.err == nil {
 		switch v := err.(type) {
 		case error:
 			if err != io.EOF {

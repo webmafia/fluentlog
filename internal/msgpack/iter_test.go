@@ -348,3 +348,24 @@ func BenchmarkIterator_Skip(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkIterator_BinReader(b *testing.B) {
+	msg := buildComplexMessage()
+	iter := NewIterator(bytes.NewReader(msg))
+
+	b.ResetTimer()
+
+	var i int
+
+	for range b.N {
+		iter.ResetBytes(msg)
+		i = 0
+
+		for iter.Next() {
+			_ = iter.BinReader()
+			i++
+		}
+	}
+
+	b.ReportMetric(float64(b.Elapsed())/float64(i)/float64(b.N), "ns/field")
+}

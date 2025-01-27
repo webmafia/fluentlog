@@ -12,10 +12,11 @@ var (
 	// ErrShortBuffer is returned when the byte slice is too short to read the expected data.
 	ErrShortBuffer = io.ErrShortBuffer
 	// ErrInvalidFormat is returned when the data does not conform to the expected MessagePack format.
-	ErrInvalidFormat     = errors.New("invalid MessagePack format")
-	ErrInvalidHeaderByte = errors.New("invalid header byte")
-	ErrInvalidExtByte    = errors.New("invalid extension byte")
-	ErrLargeBuffer       = errors.New("buffer too large")
+	ErrInvalidFormat        = errors.New("invalid MessagePack format")
+	ErrInvalidHeaderByte    = errors.New("invalid header byte")
+	ErrInvalidExtByte       = errors.New("invalid extension byte")
+	ErrReachedMaxBufferSize = errors.New("reached max buffer size")
+	ErrLargeBuffer          = errors.New("buffer too large")
 )
 
 func expectedType(c byte, expected types.Type) (err error) {
