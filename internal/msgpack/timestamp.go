@@ -259,3 +259,46 @@ func ReadTimestamp(src []byte, offset int) (t time.Time, newOffset int, err erro
 	newOffset = offset
 	return
 }
+
+func readTimeUnsafe(c byte, src []byte) time.Time {
+	var s, ns int64
+
+	switch c {
+
+	case 0xd6: // Ts32
+		if h := src[0]; h == msgpackTimestamp {
+			s = int64(binary.BigEndian.Uint32(src[1:]))
+		}
+
+	case 0xd7: // Ts64 or Forward EventTime
+		if h := src[0]; h == msgpackTimestamp {
+			// Read the combined 64-bit value
+			combined := binary.BigEndian.Uint64(src[1:])
+
+			// Extract nanoseconds (lower 30 bits)
+			ns = int64(combined & 0x3FFFFFFF)
+
+			// Extract seconds (upper 34 bits)
+			s = int64(combined >> 30)
+
+		} else if h == fluentdEventTime {
+			s = int64(int32(binary.BigEndian.Uint32(src[1:])))
+			ns = int64(int32(binary.BigEndian.Uint32(src[5:])))
+		}
+
+	case 0xc7: // ext8 (Ts96)
+		if h := src[0]; h == msgpackTimestamp {
+			ns = int64(binary.BigEndian.Uint32(src[1:]))
+			s = int64(binary.BigEndian.Uint64(src[5:]))
+
+		} else if h == fluentdEventTime {
+			s = int64(int32(binary.BigEndian.Uint32(src[1:])))
+			ns = int64(int32(binary.BigEndian.Uint32(src[5:])))
+		}
+
+	default:
+		s = readIntUnsafe[int64](c, src)
+	}
+
+	return time.Unix(s, ns)
+}

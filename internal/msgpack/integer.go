@@ -204,3 +204,27 @@ func AppendUint(buf []byte, value uint64) []byte {
 		return buf
 	}
 }
+
+func readIntUnsafe[T Numeric](c byte, src []byte) (value T) {
+	typ, _, _ := types.Get(c)
+
+	switch typ {
+
+	case types.Int:
+		if len(src) == 0 {
+			return T(int8(c))
+		}
+
+		return T(intFromBuf[int64](src))
+
+	case types.Uint:
+		if len(src) == 0 {
+			return T(int8(c))
+		}
+
+		return T(uintFromBuf[uint64](src))
+
+	default:
+		return 0
+	}
+}

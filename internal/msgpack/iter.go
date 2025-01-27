@@ -11,14 +11,17 @@ import (
 )
 
 type Iterator struct {
-	buf []byte    // Buffer
-	r   io.Reader // Origin
-	t   int       // Token start
-	n   int       // Cursor position
-	tot int       // Total read bytes
-	max int       // Max size of buffer
-	rp  int       // Release point
-	err error
+	buf   []byte    // Buffer
+	r     io.Reader // Origin
+	t0    int       // Token head start
+	t1    int       // Token value start
+	t2    int       // Token value end
+	items int       // Number of array/map items
+	n     int       // Cursor position
+	tot   int       // Total read bytes
+	max   int       // Max size of buffer
+	rp    int       // Release point
+	err   error
 }
 
 func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
@@ -56,18 +59,26 @@ func (iter *Iterator) ResetBytes(b []byte) {
 func (iter *Iterator) reset() {
 	iter.buf = iter.buf[:0]
 	iter.n = 0
-	iter.t = 0
+	iter.t0 = 0
+	iter.t1 = 0
+	iter.t2 = 0
 }
 
 // Read next token. Must be called before any Read* method.
 func (iter *Iterator) Next() bool {
-	iter.t = iter.n
+	if iter.n < iter.t2 {
+		if !iter.skipBytes(iter.t2 - iter.n) {
+			return false
+		}
+	}
+
+	iter.t0 = iter.n
 
 	if !iter.fill(1) {
 		return false
 	}
 
-	typ, length, isValueLength := types.Get(iter.buf[iter.t])
+	typ, length, isValueLength := types.Get(iter.buf[iter.t0])
 	iter.consume(1)
 
 	if !isValueLength {
@@ -76,84 +87,118 @@ func (iter *Iterator) Next() bool {
 		}
 
 		iter.consume(length)
-		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
+		length = int(uintFromBuf[uint](iter.buf[iter.t0+1 : iter.n]))
 	}
 
-	if typ != types.Array && typ != types.Map {
-		if !iter.fill(length) {
-			return false
-		}
+	iter.t1 = iter.n
 
-		iter.consume(length)
+	if typ >= types.Array {
+		iter.t2 = iter.n
+		iter.items = length
+	} else if typ == types.Ext {
+		iter.t2 = iter.n + length + 1
+		iter.items = 0
+	} else {
+		iter.t2 = iter.n + length
+		iter.items = 0
 	}
 
 	return true
 }
 
+func (iter *Iterator) fillNext() bool {
+	if iter.n >= iter.t2 {
+		return true
+	}
+
+	length := iter.Len()
+
+	if !iter.fill(length) {
+		return false
+	}
+
+	iter.consume(length)
+	return true
+}
+
 func (iter *Iterator) Type() types.Type {
-	typ, _, _ := types.Get(iter.buf[iter.t])
+	typ, _, _ := types.Get(iter.buf[iter.t0])
 	return typ
 }
 
-func (iter *Iterator) IsCollection() bool {
-	typ := iter.Type()
-	return typ == types.Array || typ == types.Map
+func (iter *Iterator) Len() int {
+	return iter.t2 - iter.t1
 }
 
-func (iter *Iterator) Len() int {
-	_, length, isValueLength := types.Get(iter.buf[iter.t])
-
-	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
-	}
-
-	return length
+func (iter *Iterator) Items() int {
+	return iter.items
 }
 
 func (iter *Iterator) Bin() []byte {
-	v, _, _ := ReadBinary(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return nil
+	}
+
+	return iter.buf[iter.t1:iter.t2]
 }
 
 func (iter *Iterator) Str() string {
-	v, _, _ := ReadString(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return ""
+	}
+
+	return fast.BytesToString(iter.buf[iter.t1:iter.t2])
 }
 
 func (iter *Iterator) Bool() bool {
-	v, _, _ := ReadBool(iter.buf, iter.t)
-	return v
+	return readBoolUnsafe(iter.buf[iter.t0])
 }
 
 func (iter *Iterator) Float() float64 {
-	v, _, _ := ReadFloat(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return 0
+	}
+
+	return floatFromBuf[float64](iter.buf[iter.t1:iter.t2])
 }
 
 func (iter *Iterator) Int() int64 {
-	v, _, _ := ReadInt(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return 0
+	}
+
+	return readIntUnsafe[int64](iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
 }
 
 func (iter *Iterator) Uint() uint64 {
-	v, _, _ := ReadUint(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return 0
+	}
+
+	return readIntUnsafe[uint64](iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
 }
 
 func (iter *Iterator) Time() time.Time {
-	v, _, _ := ReadTimestamp(iter.buf, iter.t)
-	return v
+	if !iter.fillNext() {
+		return time.Time{}
+	}
+
+	return readTimeUnsafe(iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
 }
 
 func (iter *Iterator) Value() Value {
-	return Value(iter.buf[iter.t:iter.n])
+	if !iter.fillNext() {
+		return nil
+	}
+
+	return Value(iter.buf[iter.t0:iter.t2])
 }
 
 func (iter *Iterator) Skip() {
-	typ, length, isValueLength := types.Get(iter.buf[iter.t])
+	typ, length, isValueLength := types.Get(iter.buf[iter.t0])
 
 	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.buf[iter.t+1 : iter.n]))
+		length = int(uintFromBuf[uint](iter.buf[iter.t0+1 : iter.n]))
 	}
 
 	switch typ {
@@ -324,4 +369,22 @@ func (iter *Iterator) reportError(op string, err any) bool {
 	}
 
 	return false
+}
+
+func (iter *Iterator) skipBytes(n int) bool {
+	l := len(iter.buf)
+	pos := iter.n + n
+
+	if pos < l {
+		iter.n = pos
+	} else {
+		iter.n = l
+		n = pos - l
+
+		if err := skipBytes(iter.r, n); err != nil {
+			return iter.reportError("skipBytes", err)
+		}
+	}
+
+	return true
 }

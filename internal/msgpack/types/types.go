@@ -14,9 +14,9 @@ const (
 	Float
 	Str
 	Bin
+	Ext
 	Array
 	Map
-	Ext
 )
 
 var typeStrings = [...]string{
@@ -27,9 +27,9 @@ var typeStrings = [...]string{
 	"float",
 	"str",
 	"bin",
+	"ext",
 	"array",
 	"map",
-	"ext",
 }
 
 func (t Type) String() string {

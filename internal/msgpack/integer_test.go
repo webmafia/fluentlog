@@ -374,6 +374,15 @@ func TestReadInt(t *testing.T) {
 				t.Errorf("ReadInt() newOffset = %v, want %v", gotOff, tt.wantOff)
 			}
 		})
+
+		t.Run(tt.name+" unsafe", func(t *testing.T) {
+			got := readIntUnsafe[int64](tt.src[0], tt.src[1:])
+
+			// Compare values
+			if tt.expectErr == nil && got != tt.want {
+				t.Errorf("ReadInt() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -596,6 +605,15 @@ func TestReadUint(t *testing.T) {
 			// Compare newOffset
 			if gotOff != tt.wantOff {
 				t.Errorf("ReadUint() newOffset = %v, want %v", gotOff, tt.wantOff)
+			}
+		})
+
+		t.Run(tt.name+" unsafe", func(t *testing.T) {
+			got := readIntUnsafe[uint64](tt.src[0], tt.src[1:])
+
+			// Compare values
+			if tt.expectErr == nil && got != tt.want {
+				t.Errorf("ReadInt() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

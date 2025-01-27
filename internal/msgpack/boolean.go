@@ -30,3 +30,7 @@ func ReadBool(src []byte, offset int) (value bool, newOffset int, err error) {
 	}
 	return value, offset, nil
 }
+
+func readBoolUnsafe(c byte) bool {
+	return c == 0xc3
+}

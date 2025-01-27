@@ -3,6 +3,8 @@ package msgpack
 import (
 	"testing"
 	"time"
+
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 func BenchmarkAppend(b *testing.B) {
@@ -124,10 +126,24 @@ func BenchmarkRead(b *testing.B) {
 		}
 	})
 
+	b.Run("IntUnsafe", func(b *testing.B) {
+		data := AppendInt(nil, -123456)
+		for i := 0; i < b.N; i++ {
+			_ = readIntUnsafe[int64](data[0], data[1:])
+		}
+	})
+
 	b.Run("Uint", func(b *testing.B) {
 		data := AppendUint(nil, 123456)
 		for i := 0; i < b.N; i++ {
 			_, _, _ = ReadUint(data, 0)
+		}
+	})
+
+	b.Run("UintUnsafe", func(b *testing.B) {
+		data := AppendUint(nil, 123456)
+		for i := 0; i < b.N; i++ {
+			_ = readIntUnsafe[uint64](data[0], data[1:])
 		}
 	})
 
@@ -164,6 +180,22 @@ func BenchmarkRead(b *testing.B) {
 			data := AppendTimestamp(nil, time.Unix(1672531200, 500000000), TsFormat(format))
 			for i := 0; i < b.N; i++ {
 				_, _, _ = ReadTimestamp(data, 0)
+			}
+		})
+	}
+
+	for format, formatName := range tsFormatStrings {
+		b.Run("Timestamp_"+formatName+"_Unsafe", func(b *testing.B) {
+			data := AppendTimestamp(nil, time.Unix(1672531200, 500000000), TsFormat(format))
+
+			_, length, isValueLength := types.Get(data[0])
+
+			if isValueLength {
+				length = 0
+			}
+
+			for i := 0; i < b.N; i++ {
+				_ = readTimeUnsafe(data[0], data[1+length:])
 			}
 		})
 	}

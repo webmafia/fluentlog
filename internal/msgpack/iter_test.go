@@ -50,6 +50,19 @@ func Example_buildComplexMessage() {
 	// [131 170 115 105 109 112 108 101 95 107 101 121 172 115 105 109 112 108 101 95 118 97 108 117 101 172 110 101 115 116 101 100 95 97 114 114 97 121 147 1 2 147 3 4 5 170 110 101 115 116 101 100 95 109 97 112 130 169 105 110 110 101 114 95 107 101 121 146 195 194 169 102 108 111 97 116 95 107 101 121 203 64 9 33 249 240 27 134 110]
 }
 
+func Example_iterateComplexMessage() {
+	data := buildComplexMessage()
+	iter := NewIterator(nil)
+	iter.ResetBytes(data)
+
+	for iter.Next() {
+		fmt.Println(iter.Type())
+		// iter.Skip()
+	}
+
+	// Output: TODO
+}
+
 func BenchmarkIterator(b *testing.B) {
 	msg := buildComplexMessage()
 	iter := NewIterator(bytes.NewReader(msg))

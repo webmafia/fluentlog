@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 func ExampleReadTimestamp() {
@@ -77,6 +79,38 @@ func TestTimestamp(t *testing.T) {
 					t.Errorf("Offset mismatch: got %d, want %d (format=%v, time=%v)",
 						offset, len(buf), f, original)
 				}
+
+				// Convert the decoded time to UTC (to avoid local-time differences).
+				decoded = decoded.UTC()
+
+				// Compare the decoded timestamp with the original *at the relevant precision*.
+				// Ts32, TsAuto (defaulting to Ts32), and TsInt only store second-level precision.
+				if f == Ts32 || f == TsAuto || f == TsInt {
+					// Compare only seconds for these formats.
+					if decoded.Unix() != original.Unix() {
+						t.Errorf("Decoded second mismatch for format=%v.\nWanted: %v\nGot:    %v",
+							f, original, decoded)
+					}
+				} else {
+					// Full second + nanosecond comparison for Ts64, Ts96, TsFluentd.
+					if decoded.Unix() != original.Unix() || decoded.Nanosecond() != original.Nanosecond() {
+						t.Errorf("Decoded time mismatch for format=%v.\nWanted: %v\nGot:    %v",
+							f, original, decoded)
+					}
+				}
+			})
+
+			t.Run(f.String()+"_"+original.String()+"_Unsafe", func(t *testing.T) {
+				// Encode the time in the chosen format.
+				buf := AppendTimestamp(nil, original, f)
+				_, length, isValueLength := types.Get(buf[0])
+
+				if isValueLength {
+					length = 0
+				}
+
+				// Decode the time from the buffer.
+				decoded := readTimeUnsafe(buf[0], buf[1+length:])
 
 				// Convert the decoded time to UTC (to avoid local-time differences).
 				decoded = decoded.UTC()
