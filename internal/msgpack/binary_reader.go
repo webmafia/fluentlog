@@ -31,7 +31,6 @@ func (b binReader) Read(p []byte) (n int, err error) {
 		b.iter.consume(toCopy)
 		b.iter.remain -= toCopy
 		n += toCopy
-		b.iter.n = n
 	}
 
 	// If there's still space in `p` and more data left to read, read from the `io.Reader`

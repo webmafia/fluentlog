@@ -40,7 +40,7 @@ func Example_binReader() {
 			}
 		}
 
-		// iter.Release(true)
+		iter.Release(true)
 	}
 
 	fmt.Println(iter.Error())
