@@ -25,6 +25,8 @@ type Numeric interface {
 // intFromBuf converts a byte slice to a signed integer value based on its length.
 func intFromBuf[T Signed](buf []byte) T {
 	switch len(buf) {
+	case 0:
+		return 0
 	case 1:
 		return T(int8(buf[0]))
 	case 2:
@@ -41,6 +43,8 @@ func intFromBuf[T Signed](buf []byte) T {
 // uintFromBuf converts a byte slice to an unsigned integer value based on its length.
 func uintFromBuf[T Unsigned](buf []byte) T {
 	switch len(buf) {
+	case 0:
+		return 0
 	case 1:
 		return T(buf[0])
 	case 2:
