@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.
@@ -58,7 +59,30 @@ func FuzzIterator(f *testing.F) {
 		iter.ResetBytes(msg)
 
 		for iter.Next() {
-			_ = iter.Value()
+			switch iter.Type() {
+
+			case types.Bool:
+				_ = iter.Bool()
+
+			case types.Int:
+				_ = iter.Int()
+
+			case types.Uint:
+				_ = iter.Uint()
+
+			case types.Float:
+				_ = iter.Float()
+
+			case types.Str:
+				_ = iter.Str()
+
+			case types.Bin:
+				_ = iter.Bin()
+
+			case types.Ext:
+				_ = iter.Time()
+
+			}
 		}
 
 		if err := iter.Error(); err != nil {

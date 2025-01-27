@@ -7,7 +7,8 @@ type Type uint8
 
 // Value constants for MessagePack.
 const (
-	Nil Type = iota
+	Invalid Type = iota
+	Nil
 	Bool
 	Int
 	Uint
@@ -20,6 +21,7 @@ const (
 )
 
 var typeStrings = [...]string{
+	"invalid",
 	"nil",
 	"bool",
 	"int",
