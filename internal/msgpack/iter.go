@@ -313,7 +313,7 @@ func (r *Iterator) Total() int {
 
 // Sets the release point as current position. Anything before this will be kept after release.
 func (r *Iterator) SetReleasePoint() {
-	r.rp = r.n
+	r.rp = r.t0
 }
 
 func (r *Iterator) ResetReleasePoint() {
