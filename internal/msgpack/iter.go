@@ -92,15 +92,21 @@ func (iter *Iterator) Next() bool {
 
 	iter.t1 = iter.n
 
-	if typ >= types.Array {
+	switch typ {
+
+	case types.Array, types.Map:
 		iter.t2 = iter.n
 		iter.items = length
-	} else if typ == types.Ext {
+
+	// Ext types have on extra "type" byte right before the data
+	case types.Ext:
 		iter.t2 = iter.n + length + 1
 		iter.items = 0
-	} else {
+
+	default:
 		iter.t2 = iter.n + length
 		iter.items = 0
+
 	}
 
 	return true
