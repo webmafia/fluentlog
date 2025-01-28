@@ -295,12 +295,12 @@ func (r *Iterator) fillFromReader(n int) bool {
 				return r.reportError("fillFromReader", err)
 			}
 
+			if n > 0 {
+				return r.reportError("fillFromReader", io.ErrUnexpectedEOF)
+			}
+
 			break
 		}
-	}
-
-	if n > 0 {
-		return false
 	}
 
 	// Adjust buffer size to include only valid data
@@ -389,6 +389,7 @@ func (iter *Iterator) release() {
 
 	// Adjust cursor and buffer
 	iter.n, iter.t0, iter.t1, iter.t2 = iter.rp, iter.rp, iter.rp, iter.rp
+	iter.items = 0
 }
 
 func (r *Iterator) shouldRelease() bool {
