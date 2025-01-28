@@ -351,9 +351,27 @@ func (r *Iterator) ResetReleasePoint() {
 }
 
 // Releases the buffer between the release point and the current position.
-func (r *Iterator) Release(force ...bool) {
-	if r.shouldRelease() || (len(force) > 0 && force[0]) {
-		r.release()
+func (iter *Iterator) Release(force ...bool) {
+
+	// If the user calls Release() and the current token is not fully consumed:
+	if iter.remain > 0 {
+		// The user is effectively discarding the rest of the token
+		// so skip it from the underlying stream.
+		skipLen := iter.t2 - iter.n
+		if skipLen > 0 {
+			if err := skipBytes(iter.r, skipLen); err != nil {
+				iter.reportError("Release/skipPartial", err)
+			}
+		}
+		// Mark the token as finished
+		iter.n = iter.t2
+		iter.remain = 0
+	}
+
+	// Now the token is either fully read or fully skipped,
+	// so calling the internal release() is safe:
+	if iter.shouldRelease() || (len(force) > 0 && force[0]) {
+		iter.release()
 	}
 }
 
