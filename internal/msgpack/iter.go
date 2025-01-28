@@ -378,7 +378,9 @@ func (iter *Iterator) Release(force ...bool) {
 func (iter *Iterator) release() {
 
 	// Ensure we're releasing whole tokens, by skipping to the next token.
-	iter.skipBytes(iter.t2 - iter.n)
+	if !iter.skipBytes(iter.t2 - iter.n) {
+		return
+	}
 
 	// Move all unread bytes back to the release point. Returns number of unread bytes.
 	unreadLen := copy(iter.buf[iter.rp:], iter.buf[iter.n:])
