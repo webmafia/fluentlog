@@ -1,0 +1,8 @@
+go test fuzz v1
+[]byte("OOA\xb6\x85xv\xb8\x1d\xb9OOOO\xda00")
+uint16(4096)
+int16(32672)
+bool(true)
+bool(true)
+bool(false)
+bool(false)

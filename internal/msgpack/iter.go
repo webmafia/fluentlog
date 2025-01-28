@@ -364,7 +364,7 @@ func (iter *Iterator) Release(force ...bool) {
 			}
 		}
 		// Mark the token as finished
-		iter.n = iter.t2
+		iter.n = min(iter.t2, len(iter.buf))
 		iter.remain = 0
 	}
 

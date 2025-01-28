@@ -33,10 +33,10 @@ func (b binReader) Read(p []byte) (n int, err error) {
 
 	if b.iter.remain == 0 {
 		err = io.EOF
-		b.iter.n = b.iter.t2
+		b.iter.n = min(b.iter.t2, len(b.iter.buf))
 	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
-		b.iter.n = b.iter.t2
+		b.iter.n = min(b.iter.t2, len(b.iter.buf))
 	}
 
 	return
