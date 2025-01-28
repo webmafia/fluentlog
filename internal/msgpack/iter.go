@@ -10,6 +10,7 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
+// Low-level iteration of a MessagePack stream.
 type Iterator struct {
 	buf    []byte    // Buffer
 	r      io.Reader // Origin

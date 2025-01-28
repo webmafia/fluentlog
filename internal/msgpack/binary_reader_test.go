@@ -54,7 +54,12 @@ func Example_binReader() {
 			fmt.Println("unhandled type")
 		}
 
+		if err := iter.Error(); err != nil {
+			fmt.Println("error:", err)
+		}
+
 		iter.Release(true)
+		fmt.Println("---")
 	}
 
 	fmt.Println(iter.Error())

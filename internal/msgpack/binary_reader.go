@@ -19,39 +19,31 @@ func (b binReader) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	// Read from both the buffer and the io.Reader
-	for n < len(p) {
+	n, err = b.readFromBuf(p)
 
-		// Determine how many bytes can be read
-		bufLen := len(b.iter.buf)
-		unreadLen := bufLen - b.iter.n
-
-		// First, read from the iterator's buffer
-		if unreadLen > 0 {
-			copied := copy(p[n:], b.iter.buf[b.iter.n:])
-			// b.iter.buf = b.iter.buf[:bufLen-copied]
-			b.iter.n += copied
-			n += copied
-		} else {
-
-			// Then, read the rest directly from the io.Reader
-			readBytes, readErr := b.iter.r.Read(p[n:])
-			n += readBytes
-
-			if readErr != nil {
-				err = readErr
-				break
-			}
-		}
-	}
-
-	// Ensure EOF is returned when remaining bytes reach 0
-	if b.iter.remain == 0 && err == nil {
-		err = io.EOF
+	if n == 0 {
+		n, err = b.iter.r.Read(p)
 	}
 
 	b.iter.tot += n
 	b.iter.remain -= n
+
+	if err == io.EOF && b.iter.remain != 0 {
+		err = io.ErrUnexpectedEOF
+	}
+
+	return
+}
+
+func (b binReader) readFromBuf(p []byte) (n int, err error) {
+	bufLen := len(b.iter.buf)
+	unreadLen := bufLen - b.iter.n
+
+	if unreadLen > 0 {
+		copied := copy(p, b.iter.buf[b.iter.n:])
+		b.iter.n += copied
+		n += copied
+	}
 
 	return
 }
