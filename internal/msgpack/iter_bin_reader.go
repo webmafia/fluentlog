@@ -2,7 +2,10 @@ package msgpack
 
 import "io"
 
-var _ io.Reader = binReader{}
+func (iter *Iterator) BinReader() io.Reader {
+	iter.remain = iter.Len()
+	return binReader{iter: iter}
+}
 
 type binReader struct {
 	iter *Iterator
@@ -28,7 +31,9 @@ func (b binReader) Read(p []byte) (n int, err error) {
 	b.iter.tot += n
 	b.iter.remain -= n
 
-	if err == io.EOF && b.iter.remain != 0 {
+	if b.iter.remain == 0 {
+		err = io.EOF
+	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
 

@@ -12,16 +12,14 @@ import (
 
 func Example_binReader() {
 	iter := msgpack.NewIterator(nil, 8)
-	// data := make([]byte, 95)
+	data := make([]byte, 95)
 
-	// for i := range data {
-	// 	data[i] = byte(i + 1)
-	// }
-
-	// _ = data
+	for i := range data {
+		data[i] = byte(i + 1)
+	}
 
 	var buf []byte
-	buf = msgpack.AppendBinary(buf, make([]byte, 31))
+	buf = msgpack.AppendBinary(buf, data)
 	buf = msgpack.AppendString(buf, "foobar")
 	buf = msgpack.AppendString(buf, "baz")
 	iter.ResetBytes(buf)
@@ -30,23 +28,23 @@ func Example_binReader() {
 		fmt.Println(iter.Type(), iter.Len())
 
 		switch iter.Type() {
-		// case types.Bin:
-		// 	var p [10]byte
-		// 	r := iter.BinReader()
-
-		// 	for {
-		// 		n, err := r.Read(p[:])
-
-		// 		fmt.Println("read", n, "bytes:", p[:n])
-
-		// 		if err != nil {
-		// 			fmt.Println("error:", err)
-		// 			break
-		// 		}
-		// 	}
-
 		case types.Bin:
-			fmt.Println("read bin:", iter.Bin())
+			var p [10]byte
+			r := iter.BinReader()
+
+			for {
+				n, err := r.Read(p[:])
+
+				fmt.Println("read", n, "bytes:", p[:n])
+
+				if err != nil {
+					fmt.Println("error:", err)
+					break
+				}
+			}
+
+		// case types.Bin:
+		// 	fmt.Println("read bin:", iter.Bin())
 
 		case types.Str:
 			fmt.Println("read string:", iter.Str())

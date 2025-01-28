@@ -150,11 +150,6 @@ func (iter *Iterator) Bin() []byte {
 	return iter.buf[iter.t1:iter.t2]
 }
 
-func (iter *Iterator) BinReader() io.Reader {
-	iter.remain = iter.Len()
-	return binReader{iter: iter}
-}
-
 func (iter *Iterator) Str() string {
 	if !iter.fillNext() {
 		return ""
