@@ -340,45 +340,17 @@ func (r *Iterator) Release(force ...bool) {
 }
 
 func (iter *Iterator) release() {
+
+	// Ensure we're releasing whole tokens, by skipping to the next token.
 	iter.skipBytes(iter.t2 - iter.n)
 
-	// Do not release if BinReader is active
-	if iter.remain > 0 {
-		return
-	}
-
-	// If there's nothing to release, return early
-	if iter.rp >= iter.n {
-		return
-	}
-
-	// Retain the unread portion of the buffer
-	unreadLen := len(iter.buf) - iter.n
-	copy(iter.buf[iter.rp:], iter.buf[iter.n:])
-
-	// Adjust cursor and buffer
-	shift := iter.n - iter.rp
-	iter.n = iter.rp
+	// Move all unread bytes back to the release point. Returns number of unread bytes.
+	unreadLen := copy(iter.buf[iter.rp:], iter.buf[iter.n:])
 	iter.buf = iter.buf[:iter.rp+unreadLen]
 
-	// Adjust token markers to align with the new buffer
-	if iter.t0 >= iter.rp {
-		iter.t0 -= shift
-	} else {
-		iter.t0 = 0 // Invalidate t0
-	}
-
-	if iter.t1 >= iter.rp {
-		iter.t1 -= shift
-	} else {
-		iter.t1 = 0 // Invalidate t1
-	}
-
-	if iter.t2 >= iter.rp {
-		iter.t2 -= shift
-	} else {
-		iter.t2 = 0 // Invalidate t2
-	}
+	// Adjust cursor and buffer
+	iter.n = iter.rp
+	iter.t0, iter.t1, iter.t2 = iter.rp, iter.rp, iter.rp
 }
 
 func (r *Iterator) shouldRelease() bool {
@@ -407,6 +379,8 @@ func (iter *Iterator) reportError(op string, err any) bool {
 }
 
 func (iter *Iterator) skipBytes(n int) bool {
+
+	// Nothing to skip
 	if n <= 0 {
 		return true
 	}

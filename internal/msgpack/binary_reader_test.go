@@ -11,7 +11,7 @@ import (
 )
 
 func Example_binReader() {
-	iter := msgpack.NewIterator(nil, 32)
+	iter := msgpack.NewIterator(nil, 8)
 	// data := make([]byte, 95)
 
 	// for i := range data {
