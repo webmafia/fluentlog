@@ -349,8 +349,7 @@ func (iter *Iterator) release() {
 	iter.buf = iter.buf[:iter.rp+unreadLen]
 
 	// Adjust cursor and buffer
-	iter.n = iter.rp
-	iter.t0, iter.t1, iter.t2 = iter.rp, iter.rp, iter.rp
+	iter.n, iter.t0, iter.t1, iter.t2 = iter.rp, iter.rp, iter.rp, iter.rp
 }
 
 func (r *Iterator) shouldRelease() bool {
