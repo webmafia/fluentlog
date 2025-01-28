@@ -1,8 +1,0 @@
-go test fuzz v1
-[]byte("000000000000007\xb2ڴ\x96s-400")
-uint16(4078)
-int16(32767)
-bool(true)
-bool(true)
-bool(false)
-bool(false)

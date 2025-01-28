@@ -7,18 +7,26 @@ import (
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.
-func buildComplexMessage() []byte {
+func buildComplexMessage(withBin bool) []byte {
 	var data []byte
 
+	items := 3
+
+	if withBin {
+		items++
+	}
+
 	// Example: A MessagePack map with nested structures
-	data = msgpack.AppendMapHeader(data, 4) // Map with 3 key-value pairs
+	data = msgpack.AppendMapHeader(data, items) // Map with 3 key-value pairs
 
 	// Key 1: "simple_key" -> "simple_value"
 	data = msgpack.AppendString(data, "simple_key")
 	data = msgpack.AppendString(data, "simple_value")
 
-	data = msgpack.AppendString(data, "some_binary")
-	data = msgpack.AppendBinary(data, make([]byte, math.MaxInt16))
+	if withBin {
+		data = msgpack.AppendString(data, "some_binary")
+		data = msgpack.AppendBinary(data, make([]byte, math.MaxInt16))
+	}
 
 	// Key 2: "nested_array" -> [1, 2, [3, 4, 5]]
 	data = msgpack.AppendString(data, "nested_array")

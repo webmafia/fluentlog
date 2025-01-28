@@ -81,6 +81,7 @@ func (iter *Iterator) reset() {
 	iter.t1 = 0
 	iter.t2 = 0
 	iter.remain = 0
+	iter.tot = 0
 }
 
 // Read next token. Must be called before any Read* method.
