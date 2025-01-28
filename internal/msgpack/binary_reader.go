@@ -15,45 +15,50 @@ func (b binReader) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	// Read from the existing buffer first
-	for b.iter.n < len(b.iter.buf) && n < len(p) && b.iter.remain > 0 {
+	// Read from both the buffer and the io.Reader
+	for n < len(p) && b.iter.remain > 0 {
+		// Determine how many bytes can be read
 		toCopy := len(p) - n
-		buffered := len(b.iter.buf) - b.iter.n
+		available := len(b.iter.buf) - b.iter.n
 
-		if toCopy > buffered {
-			toCopy = buffered
-		}
-		if toCopy > b.iter.remain {
-			toCopy = b.iter.remain
-		}
+		// First, read from the buffer
+		if available > 0 {
+			if toCopy > available {
+				toCopy = available
+			}
+			if toCopy > b.iter.remain {
+				toCopy = b.iter.remain
+			}
 
-		copy(p[n:], b.iter.buf[b.iter.n:b.iter.n+toCopy])
-		b.iter.consume(toCopy)
-		b.iter.remain -= toCopy
-		n += toCopy
-	}
-
-	// If there's still space in `p` and more data left to read, read from the `io.Reader`
-	if n < len(p) && b.iter.remain > 0 {
-		toRead := len(p) - n
-		if toRead > b.iter.remain {
-			toRead = b.iter.remain
+			copy(p[n:], b.iter.buf[b.iter.n:b.iter.n+toCopy])
+			b.iter.n += toCopy
+			b.iter.remain -= toCopy
+			n += toCopy
 		}
 
-		readBytes, readErr := b.iter.r.Read(p[n : n+toRead])
-		n += readBytes
-		b.iter.remain -= readBytes
+		// Then, read from the io.Reader if needed
+		if n < len(p) && b.iter.remain > 0 {
+			toRead := len(p) - n
+			if toRead > b.iter.remain {
+				toRead = b.iter.remain
+			}
 
-		if readErr != nil {
-			if readErr == io.EOF && b.iter.remain == 0 {
-				err = io.EOF
-			} else {
-				err = readErr
+			readBytes, readErr := b.iter.r.Read(p[n : n+toRead])
+			n += readBytes
+			b.iter.remain -= readBytes
+
+			if readErr != nil {
+				if readErr == io.EOF && b.iter.remain == 0 {
+					err = io.EOF
+				} else {
+					err = readErr
+				}
+				break
 			}
 		}
 	}
 
-	// If we finished reading the remaining bytes, return EOF
+	// Ensure EOF is returned when remaining bytes reach 0
 	if b.iter.remain == 0 && err == nil {
 		err = io.EOF
 	}

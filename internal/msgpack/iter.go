@@ -68,10 +68,8 @@ func (iter *Iterator) reset() {
 
 // Read next token. Must be called before any Read* method.
 func (iter *Iterator) Next() bool {
-	if iter.n < iter.t2 {
-		if !iter.skipBytes(iter.t2 - iter.n) {
-			return false
-		}
+	if !iter.skipBytes(iter.t2 - iter.n) {
+		return false
 	}
 
 	iter.remain = 0
@@ -342,12 +340,19 @@ func (r *Iterator) Release(force ...bool) {
 }
 
 func (iter *Iterator) release() {
+	iter.skipBytes(iter.t2 - iter.n)
+
+	// Do not release if BinReader is active
+	if iter.remain > 0 {
+		return
+	}
+
 	// If there's nothing to release, return early
 	if iter.rp >= iter.n {
 		return
 	}
 
-	// Calculate the unread portion of the buffer
+	// Retain the unread portion of the buffer
 	unreadLen := len(iter.buf) - iter.n
 	copy(iter.buf[iter.rp:], iter.buf[iter.n:])
 
@@ -356,7 +361,7 @@ func (iter *Iterator) release() {
 	iter.n = iter.rp
 	iter.buf = iter.buf[:iter.rp+unreadLen]
 
-	// Adjust token markers
+	// Adjust token markers to align with the new buffer
 	if iter.t0 >= iter.rp {
 		iter.t0 -= shift
 	} else {
@@ -402,6 +407,10 @@ func (iter *Iterator) reportError(op string, err any) bool {
 }
 
 func (iter *Iterator) skipBytes(n int) bool {
+	if n <= 0 {
+		return true
+	}
+
 	l := len(iter.buf)
 	pos := iter.n + n
 

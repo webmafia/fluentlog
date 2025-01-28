@@ -7,18 +7,21 @@ import (
 	"testing"
 
 	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 func Example_binReader() {
 	iter := msgpack.NewIterator(nil, 32)
-	data := make([]byte, 95)
+	// data := make([]byte, 95)
 
-	for i := range data {
-		data[i] = byte(i + 1)
-	}
+	// for i := range data {
+	// 	data[i] = byte(i + 1)
+	// }
+
+	// _ = data
 
 	var buf []byte
-	buf = msgpack.AppendBinary(buf, data)
+	buf = msgpack.AppendBinary(buf, make([]byte, 31))
 	buf = msgpack.AppendString(buf, "foobar")
 	buf = msgpack.AppendString(buf, "baz")
 	iter.ResetBytes(buf)
@@ -26,18 +29,29 @@ func Example_binReader() {
 	for iter.Next() {
 		fmt.Println(iter.Type(), iter.Len())
 
-		var p [10]byte
-		r := iter.BinReader()
+		switch iter.Type() {
+		// case types.Bin:
+		// 	var p [10]byte
+		// 	r := iter.BinReader()
 
-		for {
-			n, err := r.Read(p[:])
+		// 	for {
+		// 		n, err := r.Read(p[:])
 
-			fmt.Println("read", n, "bytes:", p[:n])
+		// 		fmt.Println("read", n, "bytes:", p[:n])
 
-			if err != nil {
-				fmt.Println("error:", err)
-				break
-			}
+		// 		if err != nil {
+		// 			fmt.Println("error:", err)
+		// 			break
+		// 		}
+		// 	}
+
+		case types.Bin:
+			fmt.Println("read bin:", iter.Bin())
+
+		case types.Str:
+			fmt.Println("read string:", iter.Str())
+		default:
+			fmt.Println("unhandled type")
 		}
 
 		iter.Release(true)
