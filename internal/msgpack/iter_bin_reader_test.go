@@ -11,7 +11,7 @@ import (
 )
 
 func Example_binReader() {
-	iter := msgpack.NewIterator(nil, 8)
+	iter := msgpack.NewIterator(nil, 32)
 	data := make([]byte, 95)
 
 	for i := range data {
@@ -38,7 +38,7 @@ func Example_binReader() {
 				fmt.Println("read", n, "bytes:", p[:n])
 
 				if err != nil {
-					fmt.Println("error:", err)
+					fmt.Println("io.Reader error:", err)
 					break
 				}
 			}
@@ -56,7 +56,7 @@ func Example_binReader() {
 			fmt.Println("error:", err)
 		}
 
-		iter.Release(true)
+		// iter.Release(true)
 		fmt.Println("---")
 	}
 
