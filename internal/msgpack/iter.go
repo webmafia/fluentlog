@@ -43,12 +43,24 @@ func (iter *Iterator) Error() error {
 	return iter.err
 }
 
-func (iter *Iterator) Reset(reader io.Reader) {
-	iter.r = reader
-	iter.reset()
+func (iter *Iterator) setMaxBufSize(size int) {
+	iter.max = size
+
+	if cap(iter.buf) > iter.max {
+		iter.buf = nil
+	}
 }
 
-func (iter *Iterator) ResetBytes(b []byte) {
+func (iter *Iterator) Reset(reader io.Reader, maxBufSize ...int) {
+	iter.r = reader
+	iter.reset()
+
+	if len(maxBufSize) > 0 {
+		iter.setMaxBufSize(maxBufSize[0])
+	}
+}
+
+func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
 	if br, ok := iter.r.(*bytes.Reader); ok {
 		br.Reset(b)
 	} else {
@@ -56,6 +68,10 @@ func (iter *Iterator) ResetBytes(b []byte) {
 	}
 
 	iter.reset()
+
+	if len(maxBufSize) > 0 {
+		iter.setMaxBufSize(maxBufSize[0])
+	}
 }
 
 func (iter *Iterator) reset() {

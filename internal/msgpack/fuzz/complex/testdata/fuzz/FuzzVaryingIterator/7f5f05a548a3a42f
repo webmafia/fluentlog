@@ -1,0 +1,8 @@
+go test fuzz v1
+[]byte("\xc500")
+uint16(3998)
+int16(32762)
+bool(true)
+bool(true)
+bool(false)
+bool(false)
