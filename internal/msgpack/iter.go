@@ -86,6 +86,8 @@ func (iter *Iterator) reset() {
 
 // Read next token. Must be called before any Read* method.
 func (iter *Iterator) Next() bool {
+	iter.err = nil
+
 	// if iter.remain > 0 {
 	// 	// forcibly skip the remainder so we don't corrupt parsing
 	// 	if err := skipBytes(iter.r, iter.remain); err != nil {
