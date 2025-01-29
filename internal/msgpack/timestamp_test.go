@@ -8,7 +8,7 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
-func sanitizeTimestamp(t time.Time, newOffset int, err error) (time.Time, error) {
+func sanitizeTimestamp(t time.Time, _ int, err error) (time.Time, error) {
 	return t.UTC(), err
 }
 
@@ -108,9 +108,7 @@ func TestTimestamp(t *testing.T) {
 				}
 			})
 
-			unsafeName := f.String() + "_" + original.String() + "_Unsafe"
-
-			t.Run(unsafeName, func(t *testing.T) {
+			t.Run(f.String()+"_"+original.String()+"_Unsafe", func(t *testing.T) {
 				// Encode the time in the chosen format.
 				buf := AppendTimestamp(nil, original, f)
 				_, length, isValueLength := types.Get(buf[0])
@@ -118,8 +116,6 @@ func TestTimestamp(t *testing.T) {
 				if isValueLength {
 					length = 0
 				}
-
-				unsafeName = unsafeName
 
 				// Decode the time from the buffer.
 				decoded := readTimeUnsafe(buf[0], buf[1+length:])
