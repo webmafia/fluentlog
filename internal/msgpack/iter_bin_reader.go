@@ -2,6 +2,9 @@ package msgpack
 
 import "io"
 
+// Get a reader of the value. The reader MUST be consumed until EOF.
+// This method is primarily for Bin data, but works for any other data type
+// (e.g. strings) as well.
 func (iter *Iterator) BinReader() io.Reader {
 	iter.remain = iter.Len()
 	return binReader{iter: iter}
@@ -37,6 +40,7 @@ func (b binReader) Read(p []byte) (n int, err error) {
 	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 		b.iter.n = min(b.iter.t2, len(b.iter.buf))
+		b.iter.remain = 0
 	}
 
 	return

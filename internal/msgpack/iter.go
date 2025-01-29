@@ -39,50 +39,6 @@ func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
 	return iter
 }
 
-func (iter *Iterator) validateState() (err error) {
-	if iter.n < 0 {
-		return fmt.Errorf("iter.n (%d) is negative", iter.n)
-	}
-
-	if iter.n > len(iter.buf) {
-		return fmt.Errorf("iter.n (%d) overflows iter.buf[0:%d]", iter.n, len(iter.buf))
-	}
-
-	if iter.t0 < 0 {
-		return fmt.Errorf("iter.t0 (%d) is negative", iter.t0)
-	}
-
-	if iter.t0 > iter.t1 {
-		return fmt.Errorf("iter.t0 (%d) exceeds iter.t1 (%d)", iter.t0, iter.t1)
-	}
-
-	if iter.t1 > iter.t2 {
-		return fmt.Errorf("iter.t1 (%d) exceeds iter.t2 (%d)", iter.t1, iter.t2)
-	}
-
-	if cap(iter.buf) > iter.max {
-		return fmt.Errorf("iter.buf[0:%d:%d] exceeds iter.max (%d)", len(iter.buf), cap(iter.buf), iter.max)
-	}
-
-	if iter.remain < 0 {
-		return fmt.Errorf("iter.remain (%d) is negative", iter.remain)
-	}
-
-	if iter.remain > (iter.t2 - iter.t1) {
-		return fmt.Errorf("iter.remain (%d) exceeds value size (%d)", iter.remain, iter.t2-iter.t1)
-	}
-
-	if iter.rp < 0 {
-		return fmt.Errorf("iter.rp (%d) is negative", iter.rp)
-	}
-
-	if iter.rp > iter.n {
-		return fmt.Errorf("iter.rp (%d) exceeds iter.n (%d)", iter.rp, iter.n)
-	}
-
-	return
-}
-
 func (iter *Iterator) Error() error {
 	return iter.err
 }
@@ -130,14 +86,15 @@ func (iter *Iterator) reset() {
 
 // Read next token. Must be called before any Read* method.
 func (iter *Iterator) Next() bool {
-	if iter.remain > 0 {
-		// forcibly skip the remainder so we don't corrupt parsing
-		if err := skipBytes(iter.r, iter.remain); err != nil {
-			return iter.reportError("Next/skipRemaining", err)
-		}
-		iter.n = iter.t2
-		iter.remain = 0
-	} else if !iter.skipBytes(iter.t2 - iter.n) {
+	// if iter.remain > 0 {
+	// 	// forcibly skip the remainder so we don't corrupt parsing
+	// 	if err := skipBytes(iter.r, iter.remain); err != nil {
+	// 		return iter.reportError("Next/skipRemaining", err)
+	// 	}
+	// 	iter.n = iter.t2
+	// 	iter.remain = 0
+	// } else
+	if !iter.skipBytes(iter.t2 - iter.n) {
 		return false
 	}
 
@@ -398,20 +355,21 @@ func (r *Iterator) ResetReleasePoint() {
 // Releases the buffer between the release point and the current position.
 func (iter *Iterator) Release(force ...bool) {
 
-	// If the user calls Release() and the current token is not fully consumed:
-	if iter.remain > 0 {
-		// The user is effectively discarding the rest of the token
-		// so skip it from the underlying stream.
-		skipLen := iter.t2 - iter.n
-		if skipLen > 0 {
-			if err := skipBytes(iter.r, skipLen); err != nil {
-				iter.reportError("Release/skipPartial", err)
-			}
-		}
-		// Mark the token as finished
-		iter.n = min(iter.t2, len(iter.buf))
-		iter.remain = 0
-	}
+	// TODO: Support partial bin reads.
+	// // If the user calls Release() and the current token is not fully consumed:
+	// if iter.remain > 0 {
+	// 	// The user is effectively discarding the rest of the token
+	// 	// so skip it from the underlying stream.
+	// 	skipLen := iter.t2 - iter.n
+	// 	if skipLen > 0 {
+	// 		if err := skipBytes(iter.r, skipLen); err != nil {
+	// 			iter.reportError("Release/skipPartial", err)
+	// 		}
+	// 	}
+	// 	// Mark the token as finished
+	// 	iter.n = min(iter.t2, len(iter.buf))
+	// 	iter.remain = 0
+	// }
 
 	// Now the token is either fully read or fully skipped,
 	// so calling the internal release() is safe:
