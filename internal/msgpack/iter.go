@@ -140,6 +140,18 @@ func (iter *Iterator) Next() bool {
 	return true
 }
 
+func (iter *Iterator) NextExpectedType(expected types.Type) (err error) {
+	if !iter.Next() {
+		if iter.err != nil {
+			return iter.err
+		}
+
+		return io.EOF
+	}
+
+	return expectedType(iter.buf[iter.t0], expected)
+}
+
 func (iter *Iterator) fillNext() bool {
 	if iter.n >= iter.t2 {
 		return true
