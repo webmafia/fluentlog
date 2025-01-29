@@ -253,22 +253,7 @@ func (iter *Iterator) Value() Value {
 		return nil
 	}
 
-	switch iter.Type() {
-
-	case types.Array, types.Map:
-		return iter.slowValue()
-
-	default:
-		return Value(iter.buf[iter.t0:iter.t2])
-
-	}
-}
-
-func (iter *Iterator) slowValue() Value {
-	start := iter.t0
-	iter.Skip()
-
-	return Value(iter.buf[start:iter.t2])
+	return iter.buf[iter.t0:iter.t2]
 }
 
 func (iter *Iterator) Skip() {

@@ -164,13 +164,14 @@ func (s *ServerConn) messageMode(tag string, ts time.Time, evLen int) (err error
 	if err = s.r.NextExpectedType(types.Map); err != nil {
 		return
 	}
-	rec := s.r.Value()
+	numFields := s.r.Items()
+	// rec := s.r.Value()
 
-	if err = s.r.Error(); err != nil {
-		return
-	}
+	// if err = s.r.Error(); err != nil {
+	// 	return
+	// }
 
-	return s.entry(tag, ts, rec)
+	return s.entry(tag, ts, s.r, numFields)
 }
 
 // The Forward Mode has the following format:
@@ -294,13 +295,14 @@ func (s *ServerConn) iterateEntry(iter *msgpack.Iterator, tag string) (err error
 	if err = iter.NextExpectedType(types.Map); err != nil {
 		return
 	}
-	rec := iter.Value()
+	numFields := iter.Items()
+	// rec := iter.Value()
 
-	if err = iter.Error(); err != nil {
-		return
-	}
+	// if err = iter.Error(); err != nil {
+	// 	return
+	// }
 
-	return s.entry(tag, ts, rec)
+	return s.entry(tag, ts, iter, numFields)
 }
 
 func (s *ServerConn) isGzip() (ok bool, err error) {
@@ -321,11 +323,28 @@ func (s *ServerConn) isGzip() (ok bool, err error) {
 	return
 }
 
-func (s *ServerConn) entry(tag string, ts time.Time, rec msgpack.Value) (err error) {
-	log.Println(tag, ts, rec)
-	for k, v := range rec.Map() {
-		log.Println("  ", k, "=", v)
+func (s *ServerConn) entry(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
+	log.Println(tag, ts)
+
+	for range numFields {
+		if !iter.Next() {
+			return iter.Error()
+		}
+
+		key := iter.Value()
+
+		if !iter.Next() {
+			return iter.Error()
+		}
+
+		val := iter.Value()
+
+		log.Println("  ", key, "=", val)
 	}
+
+	// for k, v := range rec.Map() {
+	// 	log.Println("  ", k, "=", v)
+	// }
 	return
 }
 

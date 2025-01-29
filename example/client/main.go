@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/webmafia/fluentlog"
 	"github.com/webmafia/fluentlog/forward"
@@ -43,7 +42,7 @@ func startClient(ctx context.Context) (err error) {
 	// 	return
 	// }
 
-	time.Sleep(3 * time.Second)
+	// time.Sleep(3 * time.Second)
 
 	// msg := fluentlog.NewMessage("foo.bar", time.Now())
 	// msg.AddField("foo", 123)
