@@ -1,22 +1,36 @@
 package msgpack
 
 import (
-	"bytes"
 	"fmt"
+	"io"
+	"math"
+	"sync"
 	"testing"
-	"time"
+
+	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.
-func buildComplexMessage() []byte {
+func buildComplexMessage(withBin ...bool) []byte {
 	var data []byte
 
+	items := 3
+
+	if len(withBin) > 0 && withBin[0] {
+		items++
+	}
+
 	// Example: A MessagePack map with nested structures
-	data = AppendMapHeader(data, 3) // Map with 3 key-value pairs
+	data = AppendMapHeader(data, items) // Map with 3 key-value pairs
 
 	// Key 1: "simple_key" -> "simple_value"
 	data = AppendString(data, "simple_key")
 	data = AppendString(data, "simple_value")
+
+	if len(withBin) > 0 && withBin[0] {
+		data = AppendString(data, "some_binary")
+		data = AppendBinary(data, make([]byte, math.MaxInt16))
+	}
 
 	// Key 2: "nested_array" -> [1, 2, [3, 4, 5]]
 	data = AppendString(data, "nested_array")
@@ -60,312 +74,119 @@ func Example_iterateComplexMessage() {
 		// iter.Skip()
 	}
 
-	// Output: TODO
+	// Output:
+	//
+	// map
+	// str
+	// str
+	// str
+	// array
+	// uint
+	// uint
+	// array
+	// uint
+	// uint
+	// uint
+	// str
+	// map
+	// str
+	// array
+	// bool
+	// bool
+	// str
+	// float
 }
 
-func BenchmarkIterator(b *testing.B) {
-	msg := buildComplexMessage()
-	iter := NewIterator(bytes.NewReader(msg))
+func FuzzVaryingIterator(f *testing.F) {
+	type testCase struct {
+		data           []byte
+		maxBufSize     uint16
+		copyN          int16
+		release        bool
+		forceRelease   bool
+		skipExplicitly bool
+		skipImplicitly bool
+	}
 
-	b.ResetTimer()
+	cases := []testCase{
+		{
+			data:           buildComplexMessage(true),
+			maxBufSize:     4096,
+			copyN:          math.MaxInt16,
+			release:        false,
+			forceRelease:   false,
+			skipExplicitly: false,
+			skipImplicitly: false,
+		},
+	}
 
-	var i int
+	for _, c := range cases {
+		f.Add(c.data, c.maxBufSize, c.copyN, c.release, c.forceRelease, c.skipExplicitly, c.skipImplicitly)
+	}
 
-	for range b.N {
-		iter.ResetBytes(msg)
-		i = 0
+	pool := sync.Pool{
+		New: func() any {
+			iter := NewIterator(nil)
+			return &iter
+		},
+	}
+
+	f.Fuzz(func(t *testing.T, msg []byte, maxBufSize uint16, copyN int16, release bool, forceRelease bool, skipExplicitly bool, skipImplicitly bool) {
+		iter := pool.Get().(*Iterator)
+		defer pool.Put(iter)
+
+		iter.ResetBytes(msg, int(maxBufSize))
 
 		for iter.Next() {
-			i++
-			_ = iter.Type()
-		}
-	}
-
-	b.ReportMetric(float64(b.Elapsed())/float64(i)/float64(b.N), "ns/field")
-}
-
-func BenchmarkIterator_Next(b *testing.B) {
-	b.Run("baseline", func(b *testing.B) {
-		data := AppendArrayHeader(nil, 10)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-		}
-	})
-
-	b.Run("ArrayHeader", func(b *testing.B) {
-		data := AppendArrayHeader(nil, 10)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Binary", func(b *testing.B) {
-		data := AppendBinary(nil, []byte("example binary data"))
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Bool", func(b *testing.B) {
-		data := AppendBool(nil, true)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Float", func(b *testing.B) {
-		data := AppendFloat(nil, 3.14159)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Int", func(b *testing.B) {
-		data := AppendInt(nil, -123456)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Uint", func(b *testing.B) {
-		data := AppendUint(nil, 123456)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("MapHeader", func(b *testing.B) {
-		data := AppendMapHeader(nil, 5)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("Nil", func(b *testing.B) {
-		data := AppendNil(nil)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	b.Run("String", func(b *testing.B) {
-		data := AppendString(nil, "example string")
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			iter.ResetBytes(data)
-			_ = iter.Next()
-		}
-	})
-
-	for format, formatName := range tsFormatStrings {
-		b.Run("Timestamp_"+formatName, func(b *testing.B) {
-			data := AppendTimestamp(nil, time.Unix(1672531200, 500000000), TsFormat(format))
-			iter := NewIterator(nil)
-			iter.ResetBytes(data)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				iter.ResetBytes(data)
-				_ = iter.Next()
+			if skipExplicitly {
+				iter.Skip()
+				continue
 			}
-		})
-	}
-}
 
-func BenchmarkIterator_Read(b *testing.B) {
-	b.Run("ArrayHeader", func(b *testing.B) {
-		data := AppendArrayHeader(nil, 10)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
+			if skipImplicitly {
+				continue
+			}
 
-		for i := 0; i < b.N; i++ {
-			_ = iter.Len()
-		}
-	})
+			switch iter.Type() {
 
-	b.Run("Binary", func(b *testing.B) {
-		data := AppendBinary(nil, []byte("example binary data"))
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
+			case types.Bool:
+				_ = iter.Bool()
 
-		for i := 0; i < b.N; i++ {
-			_ = iter.Bin()
-		}
-	})
+			case types.Int:
+				_ = iter.Int()
 
-	b.Run("Bool", func(b *testing.B) {
-		data := AppendBool(nil, true)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
+			case types.Uint:
+				_ = iter.Uint()
 
-		for i := 0; i < b.N; i++ {
-			_ = iter.Bool()
-		}
-	})
+			case types.Float:
+				_ = iter.Float()
 
-	b.Run("Float", func(b *testing.B) {
-		data := AppendFloat(nil, 3.14159)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
+			case types.Str:
+				_ = iter.Str()
 
-		for i := 0; i < b.N; i++ {
-			_ = iter.Float()
-		}
-	})
+			case types.Bin:
+				if l := iter.Len(); l > 1024*1024 {
+					t.Skipf("skipped bin of size %d", l)
+				}
 
-	b.Run("Int", func(b *testing.B) {
-		data := AppendInt(nil, -123456)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
+				_, err := io.CopyN(io.Discard, iter.BinReader(), int64(copyN))
 
-		for i := 0; i < b.N; i++ {
-			_ = iter.Int()
-		}
-	})
+				if err != nil {
+					t.Log(err)
+				}
 
-	b.Run("Uint", func(b *testing.B) {
-		data := AppendUint(nil, 123456)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			_ = iter.Uint()
-		}
-	})
-
-	b.Run("MapHeader", func(b *testing.B) {
-		data := AppendMapHeader(nil, 5)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			_ = iter.Len()
-		}
-	})
-
-	b.Run("Nil", func(b *testing.B) {
-		data := AppendNil(nil)
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			_ = iter.Type()
-		}
-	})
-
-	b.Run("String", func(b *testing.B) {
-		data := AppendString(nil, "example string")
-		iter := NewIterator(nil)
-		iter.ResetBytes(data)
-		iter.Next()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			_ = iter.Str()
-		}
-	})
-
-	for format, formatName := range tsFormatStrings {
-		b.Run("Timestamp_"+formatName, func(b *testing.B) {
-			data := AppendTimestamp(nil, time.Unix(1672531200, 500000000), TsFormat(format))
-			iter := NewIterator(nil)
-			iter.ResetBytes(data)
-			iter.Next()
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
+			case types.Ext:
 				_ = iter.Time()
+
+			default:
+				t.Log("invalid type")
+
 			}
-		})
-	}
-}
 
-func BenchmarkIterator_Skip(b *testing.B) {
-	msg := buildComplexMessage()
-	iter := NewIterator(bytes.NewReader(msg))
-
-	b.ResetTimer()
-
-	for range b.N {
-		iter.ResetBytes(msg)
-
-		for iter.Next() {
-			iter.Skip()
+			// TODO: Fix
+			// if release {
+			// 	iter.Release(forceRelease)
+			// }
 		}
-	}
-}
-
-func BenchmarkIterator_BinReader(b *testing.B) {
-	msg := buildComplexMessage()
-	iter := NewIterator(bytes.NewReader(msg))
-
-	b.ResetTimer()
-
-	var i int
-
-	for range b.N {
-		iter.ResetBytes(msg)
-		i = 0
-
-		for iter.Next() {
-			_ = iter.BinReader()
-			i++
-		}
-	}
-
-	b.ReportMetric(float64(b.Elapsed())/float64(i)/float64(b.N), "ns/field")
+	})
 }

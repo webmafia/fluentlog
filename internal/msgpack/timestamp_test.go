@@ -8,28 +8,36 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
+func sanitizeTimestamp(t time.Time, newOffset int, err error) (time.Time, error) {
+	return t.UTC(), err
+}
+
 func ExampleReadTimestamp() {
 	var buf []byte
 
 	t := time.Date(2025, 01, 01, 1, 2, 3, 0, time.UTC)
-	buf = AppendTimestamp(buf, t)
+	buf = AppendTimestamp(buf, t, Ts32)
+	buf = AppendTimestamp(buf, t, Ts64)
+	buf = AppendTimestamp(buf, t, Ts96)
+	buf = AppendTimestamp(buf, t, TsAuto)
+	buf = AppendTimestamp(buf, t, TsFluentd)
+	buf = AppendTimestamp(buf, t, TsInt)
 
 	fmt.Println(buf)
 
-	dst, _, err := ReadTimestamp(buf, 0)
-
-	if err != nil {
-		panic(err)
+	for range 6 {
+		fmt.Println(sanitizeTimestamp(ReadTimestamp(buf, 0)))
 	}
-
-	fmt.Println(t)
-	fmt.Println(dst.UTC())
 
 	// Output:
 	//
-	// [215 0 103 116 148 11 0 0 0 0]
-	// 2025-01-01 01:02:03 +0000 UTC
-	// 2025-01-01 01:02:03 +0000 UTC
+	// [214 255 103 116 148 11 215 255 25 221 37 2 192 0 0 0 199 12 255 0 0 0 0 0 0 0 0 103 116 148 11 214 255 103 116 148 11 215 0 103 116 148 11 0 0 0 0 206 103 116 148 11]
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
+	// 2025-01-01 01:02:03 +0000 UTC <nil>
 }
 
 // TestTimestamp exercises encoding/decoding for all TsFormat variants.
@@ -100,7 +108,9 @@ func TestTimestamp(t *testing.T) {
 				}
 			})
 
-			t.Run(f.String()+"_"+original.String()+"_Unsafe", func(t *testing.T) {
+			unsafeName := f.String() + "_" + original.String() + "_Unsafe"
+
+			t.Run(unsafeName, func(t *testing.T) {
 				// Encode the time in the chosen format.
 				buf := AppendTimestamp(nil, original, f)
 				_, length, isValueLength := types.Get(buf[0])
@@ -108,6 +118,8 @@ func TestTimestamp(t *testing.T) {
 				if isValueLength {
 					length = 0
 				}
+
+				unsafeName = unsafeName
 
 				// Decode the time from the buffer.
 				decoded := readTimeUnsafe(buf[0], buf[1+length:])

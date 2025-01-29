@@ -211,9 +211,17 @@ func readIntUnsafe[T Numeric](c byte, src []byte) (value T) {
 	switch typ {
 
 	case types.Int:
+		if c >= 0xe0 {
+			return T(int8(c))
+		}
+
 		return T(intFromBuf[int64](src))
 
 	case types.Uint:
+		if c <= 0x7f {
+			return T(int8(c))
+		}
+
 		return T(uintFromBuf[uint64](src))
 
 	default:

@@ -39,6 +39,50 @@ func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
 	return iter
 }
 
+func (iter *Iterator) validateState() (err error) {
+	if iter.n < 0 {
+		return fmt.Errorf("iter.n (%d) is negative", iter.n)
+	}
+
+	if iter.n > len(iter.buf) {
+		return fmt.Errorf("iter.n (%d) overflows iter.buf[0:%d]", iter.n, len(iter.buf))
+	}
+
+	if iter.t0 < 0 {
+		return fmt.Errorf("iter.t0 (%d) is negative", iter.t0)
+	}
+
+	if iter.t0 > iter.t1 {
+		return fmt.Errorf("iter.t0 (%d) exceeds iter.t1 (%d)", iter.t0, iter.t1)
+	}
+
+	if iter.t1 > iter.t2 {
+		return fmt.Errorf("iter.t1 (%d) exceeds iter.t2 (%d)", iter.t1, iter.t2)
+	}
+
+	if cap(iter.buf) > iter.max {
+		return fmt.Errorf("iter.buf[0:%d:%d] exceeds iter.max (%d)", len(iter.buf), cap(iter.buf), iter.max)
+	}
+
+	if iter.remain < 0 {
+		return fmt.Errorf("iter.remain (%d) is negative", iter.remain)
+	}
+
+	if iter.remain > (iter.t2 - iter.t1) {
+		return fmt.Errorf("iter.remain (%d) exceeds value size (%d)", iter.remain, iter.t2-iter.t1)
+	}
+
+	if iter.rp < 0 {
+		return fmt.Errorf("iter.rp (%d) is negative", iter.rp)
+	}
+
+	if iter.rp > iter.n {
+		return fmt.Errorf("iter.rp (%d) exceeds iter.n (%d)", iter.rp, iter.n)
+	}
+
+	return
+}
+
 func (iter *Iterator) Error() error {
 	return iter.err
 }

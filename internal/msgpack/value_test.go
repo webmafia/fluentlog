@@ -19,7 +19,12 @@ func ExampleValue_Array() {
 		fmt.Println(v.String())
 	}
 
-	// Output: TODO
+	// Output:
+	//
+	// 3
+	// foo
+	// bar
+	// baz
 }
 
 func ExampleValue_Map() {
@@ -39,7 +44,12 @@ func ExampleValue_Map() {
 		fmt.Println(k.String(), v.String())
 	}
 
-	// Output: TODO
+	// Output:
+	//
+	// 3
+	// foo 123
+	// bar 456
+	// baz 789
 }
 
 func BenchmarkValueLen(b *testing.B) {
