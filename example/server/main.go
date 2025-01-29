@@ -21,8 +21,8 @@ func main() {
 
 func startServer(ctx context.Context) (err error) {
 	serv := forward.NewServer(forward.ServerOptions{
-		// Address: "localhost:24224",
-		Address:   "localhost:24284",
+		Address: "localhost:24224",
+		// Address:   "localhost:24284",
 		SharedKey: forward.SharedKey([]byte("secret")),
 	})
 

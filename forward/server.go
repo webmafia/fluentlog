@@ -11,8 +11,9 @@ import (
 )
 
 type Server struct {
-	opt     ServerOptions
-	bufPool buffer.Pool
+	opt      ServerOptions
+	bufPool  buffer.Pool
+	iterPool msgpack.IterPool
 }
 
 type ServerOptions struct {
@@ -35,6 +36,9 @@ func NewServer(opt ServerOptions) *Server {
 
 	return &Server{
 		opt: opt,
+		iterPool: msgpack.IterPool{
+			BufMaxSize: 16 * 1024, // 16 kB
+		},
 	}
 }
 
@@ -76,8 +80,10 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 		}
 
 		go func() {
-			rBuf := s.bufPool.Get()
-			defer s.bufPool.Put(rBuf)
+			iter := s.iterPool.Get()
+			defer s.iterPool.Put(iter)
+
+			iter.Reset(conn)
 
 			wBuf := s.bufPool.Get()
 			defer s.bufPool.Put(wBuf)
@@ -85,7 +91,7 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 			sc := ServerConn{
 				serv: s,
 				conn: conn,
-				r:    msgpack.NewReader(conn, rBuf, 16*1024),
+				r:    iter,
 				w:    msgpack.NewWriter(conn, wBuf),
 			}
 

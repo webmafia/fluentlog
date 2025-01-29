@@ -4,8 +4,10 @@ import (
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
@@ -39,63 +41,54 @@ func (s *ServerConn) writeHelo() (nonce [16]byte, err error) {
 }
 
 func (c *Client) readHelo() (nonce []byte, err error) {
-	arr, err := c.r.Read()
 
-	if err != nil {
-		return
+	// 0) Array of length 2
+	if err = c.r.NextExpectedType(types.Array); err != nil {
+		return nil, errors.Join(ErrInvalidHelo, err)
 	}
-
-	if t := arr.Type(); t != types.Array || arr.Len() != 2 {
+	if c.r.Items() != 2 {
 		return nil, ErrInvalidHelo
 	}
 
-	helo, err := c.r.Read()
-
-	if err != nil {
-		return
+	// 1) Type
+	if err = c.r.NextExpectedType(types.Str); err != nil {
+		return nil, errors.Join(ErrInvalidHelo, err)
+	}
+	if typ := c.r.Str(); typ != HELO {
+		return nil, fmt.Errorf("%w: expected type '%s', got '%s'", ErrInvalidHelo, HELO, typ)
 	}
 
-	if helo.Str() != HELO {
-		return nil, ErrInvalidHelo
-	}
-
-	m, err := c.r.Read()
-
-	if err != nil {
-		return
-	}
-
-	if m.Type() != types.Map {
-		return nil, ErrInvalidHelo
+	// 2) Options
+	if err = c.r.NextExpectedType(types.Map); err != nil {
+		return nil, errors.Join(ErrInvalidHelo, err)
 	}
 
 	var (
-		key       string
 		authSalt  []byte
 		keepAlive = true
 	)
 
-	for range m.Len() {
-		if key, err = c.r.ReadStr(); err != nil {
-			return
+	for range c.r.Items() {
+		if err = c.r.NextExpectedType(types.Str); err != nil {
+			return nil, errors.Join(ErrInvalidHelo, err)
+		}
+
+		key := c.r.Str()
+
+		if !c.r.Next() {
+			return nil, c.r.Error()
 		}
 
 		switch key {
 
 		case "nonce":
-			if nonce, err = c.r.ReadBin(); err != nil {
-				return
-			}
+			nonce = c.r.Bin()
 
 		case "auth":
-			if authSalt, err = c.r.ReadBin(); err != nil {
-				return
-			}
+			authSalt = c.r.Bin()
 
 		case "keepalive":
-			if keepAlive, err = c.r.ReadBool(); err != nil {
-				return
-			}
+			keepAlive = c.r.Bool()
 
 		}
 	}
@@ -139,52 +132,53 @@ func (c *Client) writePing(nonce []byte) (salt [16]byte, err error) {
 }
 
 func (s *ServerConn) readPing(nonce []byte) (salt []byte, sharedKey []byte, err error) {
-	arr, err := s.r.Read()
+	var clientHostname, digest string
 
-	if err != nil {
-		return
+	// 0) Array of 6 items
+	if err = s.r.NextExpectedType(types.Array); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
-
-	if arr.Type() != types.Array || arr.Len() != 6 {
+	if s.r.Items() != 6 {
 		return nil, nil, ErrInvalidPing
 	}
 
-	typ, err := s.r.Read()
-
-	if err != nil {
-		return
+	// 1) Type
+	if err = s.r.NextExpectedType(types.Str); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
+	}
+	if typ := s.r.Str(); typ != PING {
+		return nil, nil, fmt.Errorf("%w: expected type '%s', got '%s'", ErrInvalidPing, PING, typ)
 	}
 
-	if typ.Str() != PING {
-		return nil, nil, ErrInvalidPing
+	// 2) Client hostname
+	if err = s.r.NextExpectedType(types.Str); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
+	clientHostname = s.r.Str()
 
-	var (
-		clientHostname string
-		digest         string
-	)
-
-	if clientHostname, err = s.r.ReadStr(); err != nil {
-		return
+	// 3) Shared key salt
+	if err = s.r.NextExpectedType(types.Str, types.Bin); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
+	salt = s.r.Bin()
 
-	if salt, err = s.r.ReadBin(); err != nil {
-		return
+	// 4) Shared key hexdigest
+	if err = s.r.NextExpectedType(types.Str); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
+	digest = s.r.Str()
 
-	if digest, err = s.r.ReadStr(); err != nil {
-		return
+	// 5) Username
+	if err = s.r.NextExpectedType(types.Str); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
+	_ = s.r.Str()
 
-	// Skip username
-	if _, err = s.r.Read(); err != nil {
-		return
+	// 5) Password
+	if err = s.r.NextExpectedType(types.Str); err != nil {
+		return nil, nil, errors.Join(ErrInvalidPing, err)
 	}
-
-	// Skip password
-	if _, err = s.r.Read(); err != nil {
-		return
-	}
+	_ = s.r.Str()
 
 	if sharedKey, err = s.serv.opt.SharedKey(clientHostname); err != nil {
 		return
@@ -210,65 +204,62 @@ func (s *ServerConn) writePong(nonce []byte, salt []byte, sharedKey []byte, auth
 }
 
 func (c *Client) readPong(nonce []byte, salt [16]byte) (err error) {
-	arr, err := c.r.Read()
 
-	if err != nil {
-		return
+	// 0) Array of 5 items
+	if err = c.r.NextExpectedType(types.Array); err != nil {
+		return errors.Join(ErrInvalidPong, err)
 	}
-
-	if arr.Type() != types.Array || arr.Len() != 5 {
+	if c.r.Items() != 5 {
 		return ErrInvalidPong
 	}
 
-	typ, err := c.r.Read()
-
-	if err != nil {
-		return
+	// 1) Type
+	if err = c.r.NextExpectedType(types.Str); err != nil {
+		return errors.Join(ErrInvalidPong, err)
+	}
+	if typ := c.r.Str(); typ != PONG {
+		return fmt.Errorf("%w: expected type '%s', got '%s'", ErrInvalidPong, PONG, typ)
 	}
 
-	if typ.Str() != PONG {
-		return ErrInvalidPong
+	// 2) Auth result
+	if err = c.r.NextExpectedType(types.Bool); err != nil {
+		return errors.Join(ErrInvalidPong, err)
 	}
+	authResult := c.r.Bool()
 
-	authResult, err := c.r.Read()
-
-	if err != nil {
-		return
+	// 3) Reason
+	if err = c.r.NextExpectedType(types.Str); err != nil {
+		return errors.Join(ErrInvalidPong, err)
 	}
+	reason := c.r.Str()
 
-	reason, err := c.r.Read()
-
-	if err != nil {
-		return
+	// 4) Server hostname
+	if err = c.r.NextExpectedType(types.Str); err != nil {
+		return errors.Join(ErrInvalidPong, err)
 	}
+	serverHostname := c.r.Str()
 
-	serverHostname, err := c.r.Read()
-
-	if err != nil {
-		return
+	// 5) Shared key hexdigest
+	if err = c.r.NextExpectedType(types.Str); err != nil {
+		return errors.Join(ErrInvalidPong, err)
 	}
+	digest := c.r.Str()
 
-	digest, err := c.r.Read()
-
-	if err != nil {
-		return
-	}
-
-	if !authResult.Bool() {
-		if !reason.IsZero() {
-			return fmt.Errorf("%w - reason: %s", ErrFailedAuth, reason)
+	if !authResult {
+		if reason != "" {
+			return fmt.Errorf("%w: %s", ErrFailedAuth, reason)
 		}
 
 		return ErrFailedAuth
 	}
 
-	correctDigest := sharedKeyDigest(salt[:], serverHostname.Str(), nonce, c.opt.SharedKey)
+	correctDigest := sharedKeyDigest(salt[:], serverHostname, nonce, c.opt.SharedKey)
 
-	if !internal.SameString(digest.Str(), correctDigest) {
+	if !internal.SameString(digest, correctDigest) {
 		return ErrFailedAuth
 	}
 
-	c.serverHostname = serverHostname.StrCopy()
+	c.serverHostname = strings.Clone(serverHostname)
 	return
 }
 

@@ -14,7 +14,7 @@ import (
 type Client struct {
 	addr           string
 	conn           *net.TCPConn
-	r              msgpack.Reader
+	r              msgpack.Iterator
 	w              msgpack.Writer
 	opt            ClientOptions
 	serverHostname string
@@ -29,7 +29,7 @@ type ClientOptions struct {
 func NewClient(addr string, opt ClientOptions) *Client {
 	return &Client{
 		addr: addr,
-		r:    msgpack.NewReader(nil, buffer.NewBuffer(4096), 4096),
+		r:    msgpack.NewIterator(nil, 4096),
 		w:    msgpack.NewWriter(nil, buffer.NewBuffer(4096)),
 		opt:  opt,
 	}

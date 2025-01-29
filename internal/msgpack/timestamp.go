@@ -269,12 +269,12 @@ func readTimeUnsafe(c byte, src []byte) time.Time {
 
 	switch c {
 
-	case 0xd6: // Ts32
+	case 0xd6: // fixext4 (Ts32)
 		if h := src[0]; h == msgpackTimestamp {
 			s = int64(binary.BigEndian.Uint32(src[1:]))
 		}
 
-	case 0xd7: // Ts64 or Forward EventTime
+	case 0xd7: // fixext8 (Ts64) or Forward EventTime
 		if h := src[0]; h == msgpackTimestamp {
 			if len(src) == 9 {
 				// Read the combined 64-bit value
@@ -294,7 +294,7 @@ func readTimeUnsafe(c byte, src []byte) time.Time {
 			}
 		}
 
-	case 0xc7: // ext8 (Ts96)
+	case 0xc7: // ext8 (Ts96) or Forward EventTime
 		if h := src[0]; h == msgpackTimestamp {
 			if len(src) == 13 {
 				ns = int64(binary.BigEndian.Uint32(src[1:]))

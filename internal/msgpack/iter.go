@@ -127,9 +127,9 @@ func (iter *Iterator) Next() bool {
 		iter.items = length
 
 	// Ext types have on extra "type" byte right before the data
-	case types.Ext:
-		iter.t2 = iter.n + length + 1
-		iter.items = 0
+	// case types.Ext:
+	// 	iter.t2 = iter.n + length + 1
+	// 	iter.items = 0
 
 	default:
 		iter.t2 = iter.n + length
@@ -140,7 +140,7 @@ func (iter *Iterator) Next() bool {
 	return true
 }
 
-func (iter *Iterator) NextExpectedType(expected types.Type) (err error) {
+func (iter *Iterator) NextExpectedType(expected ...types.Type) (err error) {
 	if !iter.Next() {
 		if iter.err != nil {
 			return iter.err
@@ -149,7 +149,23 @@ func (iter *Iterator) NextExpectedType(expected types.Type) (err error) {
 		return io.EOF
 	}
 
-	return expectedType(iter.buf[iter.t0], expected)
+	typ := iter.Type()
+
+	for _, t := range expected {
+		if t == typ {
+			return nil
+		}
+	}
+
+	return expectedTypes(iter.buf[iter.t0], expected...)
+}
+
+func (iter *Iterator) Peek(n int) ([]byte, error) {
+	if !iter.fill(n) {
+		return nil, iter.err
+	}
+
+	return iter.buf[iter.n : iter.n+n], nil
 }
 
 func (iter *Iterator) fillNext() bool {
@@ -237,7 +253,22 @@ func (iter *Iterator) Value() Value {
 		return nil
 	}
 
-	return Value(iter.buf[iter.t0:iter.t2])
+	switch iter.Type() {
+
+	case types.Array, types.Map:
+		return iter.slowValue()
+
+	default:
+		return Value(iter.buf[iter.t0:iter.t2])
+
+	}
+}
+
+func (iter *Iterator) slowValue() Value {
+	start := iter.t0
+	iter.Skip()
+
+	return Value(iter.buf[start:iter.t2])
 }
 
 func (iter *Iterator) Skip() {
