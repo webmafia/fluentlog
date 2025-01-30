@@ -8,13 +8,13 @@ package gzip
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
 
 	"github.com/klauspost/compress/flate"
-	"github.com/webmafia/fast"
 )
 
 const (
@@ -66,6 +66,7 @@ type Reader struct {
 	decompressor io.ReadCloser
 	digest       uint32 // CRC-32, IEEE polynomial (section 8)
 	size         uint32 // Uncompressed size (section 2.3.1)
+	remaining    int    // Number of valid bytes left in buf
 	buf          [512]byte
 	err          error
 	multistream  bool
@@ -136,118 +137,61 @@ func (z *Reader) Multistream(ok bool) {
 	z.multistream = ok
 }
 
-func (z *Reader) skipHeader() error {
-	// Ensure the underlying reader is initialized
-	if z.r == nil {
-		return ErrHeader
-	}
-
-	// Read fixed 10-byte gzip header
-	var buf [10]byte
-	if _, err := io.ReadFull(z.r, fast.NoescapeBytes(buf[:])); err != nil {
-		return err // Returns EOF if gzip stream is incomplete
-	}
-
-	// Validate magic number & compression method
-	if buf[0] != gzipID1 || buf[1] != gzipID2 || buf[2] != gzipDeflate {
-		return ErrHeader
-	}
-	flg := buf[3] // Flags byte
-
-	// Skip extra fields, filename, and comment if they exist
-	if flg&flagExtra != 0 {
-		var extraLen [2]byte
-		if _, err := io.ReadFull(z.r, extraLen[:]); err != nil {
-			return err
-		}
-		extraSize := int64(le.Uint16(extraLen[:]))
-		var discardBuf [32]byte // Small stack buffer
-		for extraSize > 0 {
-			n := extraSize
-			if n > int64(len(discardBuf)) {
-				n = int64(len(discardBuf))
-			}
-			if _, err := z.r.Read(discardBuf[:n]); err != nil {
-				return err
-			}
-			extraSize -= n
-		}
-	}
-
-	// Skip null-terminated filename if present
-	if flg&flagName != 0 {
-		for {
-			b, err := z.r.ReadByte()
-			if err != nil || b == 0 {
-				break
-			}
-		}
-	}
-
-	// Skip null-terminated comment if present
-	if flg&flagComment != 0 {
-		for {
-			b, err := z.r.ReadByte()
-			if err != nil || b == 0 {
-				break
-			}
-		}
-	}
-
-	// Skip header CRC if present
-	if flg&flagHdrCrc != 0 {
-		var crc [2]byte
-		if _, err := io.ReadFull(z.r, crc[:]); err != nil {
-			return err
-		}
-	}
-
-	z.digest = 0
-	if z.decompressor == nil {
-		z.decompressor = flate.NewReader(z.r)
-	} else {
-		z.decompressor.(flate.Resetter).Reset(z.r, nil)
-	}
-
-	return nil // Successfully skipped the header
-}
-
-// Read implements io.Reader, reading uncompressed bytes from its underlying Reader.
 func (z *Reader) Read(p []byte) (n int, err error) {
 	if z.err != nil {
 		return 0, z.err
 	}
 
+	// 1. Consume any remaining buffered bytes first
+	if z.remaining > 0 {
+		n = copy(p, z.buf[:z.remaining]) // Copy from buffer to output
+		z.remaining -= n                 // Reduce remaining count
+		if z.remaining > 0 {
+			copy(z.buf[:z.remaining], z.buf[n:]) // Shift remaining bytes
+		}
+		return n, nil
+	}
+
+	// 2. Read from `z.decompressor`
 	for n == 0 {
 		n, z.err = z.decompressor.Read(p)
 		z.digest = crc32.Update(z.digest, crc32.IEEETable, p[:n])
 		z.size += uint32(n)
+
 		if z.err != io.EOF {
-			// In the normal case we return here.
+			// Normal case: return decompressed data
 			return n, z.err
 		}
 
-		// Finished file; check checksum and size.
-		if _, err := io.ReadFull(z.r, z.buf[:8]); err != nil {
+		// 3. Finished file; validate checksum and size
+		if _, err := io.ReadAtLeast(z.r, z.buf[:8], 8); err != nil {
+			if err == io.EOF {
+				return 0, io.ErrUnexpectedEOF // Ensure we return a meaningful error
+			}
 			z.err = noEOF(err)
-			return n, z.err
+			return 0, z.err
 		}
-		digest := le.Uint32(z.buf[:4])
-		size := le.Uint32(z.buf[4:8])
-		if digest != z.digest || size != z.size {
+
+		// 4. Store remaining bytes from gzip trailer
+		z.remaining = 8
+		trailerDigest := le.Uint32(z.buf[:4])
+		trailerSize := le.Uint32(z.buf[4:8])
+		if trailerDigest != z.digest || trailerSize != z.size {
 			z.err = ErrChecksum
-			return n, z.err
+			return 0, z.err
 		}
 		z.digest, z.size = 0, 0
+		z.remaining = 0 // All trailer bytes consumed
 
-		// File is ok; check if there is another.
+		// 5. Handle multistream gzip files correctly
 		if !z.multistream {
-			return n, io.EOF
+			return 0, io.EOF
 		}
-		z.err = nil // Remove io.EOF
+		z.err = nil // Clear io.EOF
 
+		// 6. Process the next gzip member
 		if z.err = z.skipHeader(); z.err != nil {
-			return n, z.err
+			return 0, z.err
 		}
 	}
 
@@ -259,4 +203,122 @@ func (z *Reader) Read(p []byte) (n int, err error) {
 // fully consumed until the io.EOF.
 func (z *Reader) Close() error {
 	return z.decompressor.Close()
+}
+
+// skipHeader efficiently skips the gzip header by reading into the entire buffer and using `io.ReadAtLeast()`.
+func (z *Reader) skipHeader() error {
+
+	// Read at least 10 bytes for the fixed gzip header.
+	if _, err := io.ReadAtLeast(z.r, z.buf[:], 10); err != nil {
+		return err
+	}
+
+	// Validate magic number & compression method
+	if z.buf[0] != gzipID1 || z.buf[1] != gzipID2 || z.buf[2] != gzipDeflate {
+		return ErrHeader
+	}
+
+	flg := z.buf[3] // Flags byte
+	pos := 10       // Start processing after fixed header
+
+	// Skip Extra Field if present
+	if flg&flagExtra != 0 {
+		if err := z.ensureBytes(&pos, 2); err != nil {
+			return err
+		}
+		extraLen := int(le.Uint16(z.buf[pos : pos+2]))
+		pos += 2
+		if err := z.skipBytes(extraLen, &pos); err != nil {
+			return err
+		}
+	}
+
+	// Skip Filename if present
+	if flg&flagName != 0 {
+		if err := z.skipNullTerminated(&pos); err != nil {
+			return err
+		}
+	}
+
+	// Skip Comment if present
+	if flg&flagComment != 0 {
+		if err := z.skipNullTerminated(&pos); err != nil {
+			return err
+		}
+	}
+
+	// Skip Header CRC if present
+	if flg&flagHdrCrc != 0 {
+		if err := z.ensureBytes(&pos, 2); err != nil {
+			return err
+		}
+		pos += 2
+	}
+
+	// Initialize DEFLATE reader
+	if z.decompressor == nil {
+		z.decompressor = flate.NewReader(z.r)
+	} else {
+		z.decompressor.(flate.Resetter).Reset(z.r, nil)
+	}
+
+	return nil
+}
+
+// ensureBytes ensures at least `n` more bytes are available in `z.buf`, refilling if necessary.
+func (z *Reader) ensureBytes(pos *int, n int) error {
+	remaining := len(z.buf) - *pos
+	if remaining >= n {
+		return nil
+	}
+
+	// Move unread data to the start of the buffer and refill
+	copy(z.buf[:remaining], z.buf[*pos:])
+	if _, err := io.ReadAtLeast(z.r, z.buf[remaining:], n-remaining); err != nil {
+		return err
+	}
+	*pos = 0
+	return nil
+}
+
+// skipBytes skips `n` bytes from the buffer, refilling if needed.
+func (z *Reader) skipBytes(skip int, pos *int) error {
+	for skip > 0 {
+		remaining := len(z.buf) - *pos
+		if remaining == 0 {
+			// Refill buffer
+			if _, err := io.ReadAtLeast(z.r, z.buf[:], 1); err != nil {
+				return err
+			}
+			*pos = 0
+			remaining = len(z.buf)
+		}
+
+		if skip <= remaining {
+			*pos += skip
+			return nil
+		} else {
+			skip -= remaining
+			*pos = len(z.buf)
+		}
+	}
+	return nil
+}
+
+// skipNullTerminated skips a null-terminated string, using buffered reads.
+func (z *Reader) skipNullTerminated(pos *int) error {
+	for {
+		// Search for null byte in the buffer
+		if idx := bytes.IndexByte(z.buf[*pos:], 0); idx != -1 {
+			// Found null, move position past it
+			*pos += idx + 1
+			return nil
+		}
+
+		// Null not found, refill buffer
+		if _, err := io.ReadAtLeast(z.r, z.buf[:], 1); err != nil {
+			return err
+		}
+		*pos = 0
+	}
 }
