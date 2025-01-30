@@ -1,6 +1,7 @@
 package msgpack_test
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -152,6 +153,189 @@ func TestBinReader(t *testing.T) {
 			if !bytes.Equal(tt.expected, result) {
 				t.Errorf("Binary payload does not match in %s. Expected %v, got %v", tt.name, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestBinReader_ReadByte(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     []byte // Binary payload to test
+		bufSize  int    // Max buffer size for the iterator
+		expected []byte // Expected binary data
+	}{
+		{
+			name:     "Small Payload",
+			data:     msgpack.AppendBinary(nil, []byte("hello")),
+			bufSize:  10, // More than enough buffer size
+			expected: []byte("hello"),
+		},
+		{
+			name: "Partial Buffer Fill",
+			data: func() []byte {
+				// Create a binary payload that forces multiple refills
+				return msgpack.AppendBinary(nil, []byte("this is a test"))
+			}(),
+			bufSize:  5, // Force small buffer refills
+			expected: []byte("this is a test"),
+		},
+		{
+			name: "Large Binary Data",
+			data: func() []byte {
+				// Large binary payload (8 KB)
+				largePayload := bytes.Repeat([]byte("X"), 8*1024)
+				return msgpack.AppendBinary(nil, largePayload)
+			}(),
+			bufSize:  512, // Much smaller than total payload
+			expected: bytes.Repeat([]byte("X"), 8*1024),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := bytes.NewReader(tt.data)
+
+			// Create an iterator with a restricted buffer size
+			iter := msgpack.NewIterator(reader, tt.bufSize)
+			if !iter.Next() {
+				t.Fatalf("Failed to move to the next token in %s", tt.name)
+			}
+
+			// Use BinReader to read the binary payload byte-by-byte
+			binReader := iter.BinReader()
+			if binReader == nil {
+				t.Fatalf("BinReader returned nil in %s", tt.name)
+			}
+
+			var result []byte
+			for {
+				b, err := binReader.(io.ByteReader).ReadByte()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatalf("Unexpected error while reading byte in %s: %v", tt.name, err)
+				}
+				result = append(result, b)
+			}
+
+			// Verify the binary payload
+			if !bytes.Equal(tt.expected, result) {
+				t.Errorf("Binary payload does not match in %s. Expected %v, got %v", tt.name, tt.expected, result)
+			}
+		})
+	}
+}
+
+func BenchmarkBinReader_ReadByte(b *testing.B) {
+	tests := []struct {
+		name    string
+		payload []byte // Raw binary data
+		bufSize int    // Max buffer size for the iterator
+	}{
+		{
+			name:    "Small Payload",
+			payload: []byte("hello world"),
+			bufSize: 16, // More than enough buffer space
+		},
+		{
+			name:    "Medium Payload",
+			payload: bytes.Repeat([]byte("X"), 1024), // 1 KB payload
+			bufSize: 64,                              // Forces multiple refills
+		},
+		{
+			name:    "Large Payload",
+			payload: bytes.Repeat([]byte("Y"), 10*1024), // 10 KB payload
+			bufSize: 512,                                // Much smaller than total payload
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			// Encode the payload as MessagePack binary for each run
+			data := msgpack.AppendBinary(nil, tt.payload)
+			// Reinitialize a fresh reader for every iteration
+			reader := bytes.NewReader(data)
+			iter := msgpack.NewIterator(reader, tt.bufSize)
+
+			// Reset benchmark timer
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				reader.Reset(data)
+				iter.Reset(reader)
+
+				// Ensure we correctly move to the next token
+				if !iter.Next() {
+					b.Fatalf("Failed to move to the next token in %s", tt.name)
+				}
+
+				binReader := iter.BinReader()
+
+				// Read the binary data byte-by-byte
+				for {
+					_, err := binReader.ReadByte()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						b.Fatalf("Unexpected error while reading byte in %s: %v", tt.name, err)
+					}
+				}
+			}
+
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(data)), "ns/byte")
+		})
+	}
+}
+
+func BenchmarkBufioReader_ReadByte(b *testing.B) {
+	tests := []struct {
+		name    string
+		payload []byte // Raw binary data
+		bufSize int    // Max buffer size for the iterator
+	}{
+		{
+			name:    "Small Payload",
+			payload: []byte("hello world"),
+			bufSize: 16, // More than enough buffer space
+		},
+		{
+			name:    "Medium Payload",
+			payload: bytes.Repeat([]byte("X"), 1024), // 1 KB payload
+			bufSize: 64,                              // Forces multiple refills
+		},
+		{
+			name:    "Large Payload",
+			payload: bytes.Repeat([]byte("Y"), 10*1024), // 10 KB payload
+			bufSize: 512,                                // Much smaller than total payload
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			reader := bytes.NewReader(tt.payload)
+			buf := bufio.NewReader(reader)
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				reader.Reset(tt.payload)
+				buf.Reset(reader)
+
+				// Read the binary data byte-by-byte
+				for {
+					_, err := buf.ReadByte()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						b.Fatalf("Unexpected error while reading byte in %s: %v", tt.name, err)
+					}
+				}
+			}
+
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(tt.payload)), "ns/byte")
 		})
 	}
 }

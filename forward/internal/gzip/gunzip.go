@@ -159,21 +159,19 @@ func (z *Reader) Read(p []byte) (n int, err error) {
 		z.size += uint32(n)
 
 		if z.err != io.EOF {
-			// Normal case: return decompressed data
 			return n, z.err
 		}
 
 		// 3. Finished file; validate checksum and size
-		if _, err := io.ReadAtLeast(z.r, z.buf[:8], 8); err != nil {
+		if err := z.ensureBytes(8); err != nil {
 			if err == io.EOF {
-				return 0, io.ErrUnexpectedEOF // Ensure we return a meaningful error
+				return 0, io.ErrUnexpectedEOF
 			}
 			z.err = noEOF(err)
 			return 0, z.err
 		}
 
-		// 4. Store remaining bytes from gzip trailer
-		z.remaining = 8
+		// 4. Check gzip trailer (CRC + ISIZE)
 		trailerDigest := le.Uint32(z.buf[:4])
 		trailerSize := le.Uint32(z.buf[4:8])
 		if trailerDigest != z.digest || trailerSize != z.size {
@@ -181,13 +179,13 @@ func (z *Reader) Read(p []byte) (n int, err error) {
 			return 0, z.err
 		}
 		z.digest, z.size = 0, 0
-		z.remaining = 0 // All trailer bytes consumed
+		z.remaining -= 8 // Mark the trailer bytes as consumed
 
-		// 5. Handle multistream gzip files correctly
+		// 5. Handle multistream gzip files
 		if !z.multistream {
 			return 0, io.EOF
 		}
-		z.err = nil // Clear io.EOF
+		z.err = nil
 
 		// 6. Process the next gzip member
 		if z.err = z.skipHeader(); z.err != nil {
@@ -205,120 +203,126 @@ func (z *Reader) Close() error {
 	return z.decompressor.Close()
 }
 
-// skipHeader efficiently skips the gzip header by reading into the entire buffer and using `io.ReadAtLeast()`.
+// skipHeader efficiently skips the gzip header while properly updating `z.remaining`.
 func (z *Reader) skipHeader() error {
-
-	// Read at least 10 bytes for the fixed gzip header.
-	if _, err := io.ReadAtLeast(z.r, z.buf[:], 10); err != nil {
+	if err := z.ensureBytes(10); err != nil {
 		return err
 	}
-
-	// Validate magic number & compression method
+	// Parse first 10 bytes from z.buf[0..10].
 	if z.buf[0] != gzipID1 || z.buf[1] != gzipID2 || z.buf[2] != gzipDeflate {
 		return ErrHeader
 	}
+	flg := z.buf[3]
+	// ... (check reserved bits, etc.)
 
-	flg := z.buf[3] // Flags byte
-	pos := 10       // Start processing after fixed header
+	// Consume them
+	z.remaining -= 10
+	// Shift them out
+	copy(z.buf[:z.remaining], z.buf[10:10+z.remaining])
 
-	// Skip Extra Field if present
+	// Now parse optional fields from the front each time
 	if flg&flagExtra != 0 {
-		if err := z.ensureBytes(&pos, 2); err != nil {
+		// ensure at least 2 new bytes are available
+		if err := z.ensureBytes(2); err != nil {
 			return err
 		}
-		extraLen := int(le.Uint16(z.buf[pos : pos+2]))
-		pos += 2
-		if err := z.skipBytes(extraLen, &pos); err != nil {
+		extraLen := int(le.Uint16(z.buf[:2]))
+		z.remaining -= 2
+		copy(z.buf[:z.remaining], z.buf[2:2+z.remaining])
+
+		// skip 'extraLen' bytes
+		if err := z.skipBytes(extraLen); err != nil {
 			return err
 		}
 	}
 
-	// Skip Filename if present
 	if flg&flagName != 0 {
-		if err := z.skipNullTerminated(&pos); err != nil {
+		if err := z.skipNullTerminated(); err != nil {
 			return err
 		}
 	}
-
-	// Skip Comment if present
 	if flg&flagComment != 0 {
-		if err := z.skipNullTerminated(&pos); err != nil {
+		if err := z.skipNullTerminated(); err != nil {
 			return err
 		}
 	}
-
-	// Skip Header CRC if present
 	if flg&flagHdrCrc != 0 {
-		if err := z.ensureBytes(&pos, 2); err != nil {
+		if err := z.ensureBytes(2); err != nil {
 			return err
 		}
-		pos += 2
+		z.remaining -= 2
+		copy(z.buf[:z.remaining], z.buf[2:2+z.remaining])
 	}
 
-	// Initialize DEFLATE reader
+	// Initialize or reset the DEFLATE reader
 	if z.decompressor == nil {
 		z.decompressor = flate.NewReader(z.r)
 	} else {
 		z.decompressor.(flate.Resetter).Reset(z.r, nil)
 	}
-
 	return nil
 }
 
-// ensureBytes ensures at least `n` more bytes are available in `z.buf`, refilling if necessary.
-func (z *Reader) ensureBytes(pos *int, n int) error {
-	remaining := len(z.buf) - *pos
-	if remaining >= n {
+// ensureBytes ensures that `n` bytes are available in `z.buf`, refilling if needed.
+func (z *Reader) ensureBytes(n int) error {
+	// If we already have enough bytes in the buffer, return immediately.
+	if z.remaining >= n {
 		return nil
 	}
 
-	// Move unread data to the start of the buffer and refill
-	copy(z.buf[:remaining], z.buf[*pos:])
-	if _, err := io.ReadAtLeast(z.r, z.buf[remaining:], n-remaining); err != nil {
+	// Shift existing unread bytes to the start of the buffer
+	if z.remaining > 0 {
+		copy(z.buf[:z.remaining], z.buf[len(z.buf)-z.remaining:])
+	}
+
+	// Read more data into the buffer
+	read, err := io.ReadAtLeast(z.r, z.buf[z.remaining:], n-z.remaining)
+	if err != nil {
 		return err
 	}
-	*pos = 0
+
+	// Update remaining bytes count
+	z.remaining += read
 	return nil
 }
 
-// skipBytes skips `n` bytes from the buffer, refilling if needed.
-func (z *Reader) skipBytes(skip int, pos *int) error {
-	for skip > 0 {
-		remaining := len(z.buf) - *pos
-		if remaining == 0 {
-			// Refill buffer
-			if _, err := io.ReadAtLeast(z.r, z.buf[:], 1); err != nil {
+// skipBytes skips `n` bytes, refilling the buffer if necessary.
+func (z *Reader) skipBytes(n int) error {
+	for n > 0 {
+		if z.remaining == 0 {
+			if err := z.ensureBytes(1); err != nil {
 				return err
 			}
-			*pos = 0
-			remaining = len(z.buf)
 		}
 
-		if skip <= remaining {
-			*pos += skip
-			return nil
-		} else {
-			skip -= remaining
-			*pos = len(z.buf)
+		toSkip := n
+		if toSkip > z.remaining {
+			toSkip = z.remaining
 		}
+
+		z.remaining -= toSkip
+		n -= toSkip
 	}
+
 	return nil
 }
 
-// skipNullTerminated skips a null-terminated string, using buffered reads.
-func (z *Reader) skipNullTerminated(pos *int) error {
+// skipNullTerminated skips a null-terminated string, refilling the buffer as needed.
+func (z *Reader) skipNullTerminated() error {
 	for {
+		if z.remaining == 0 {
+			if err := z.ensureBytes(1); err != nil {
+				return err
+			}
+		}
+
 		// Search for null byte in the buffer
-		if idx := bytes.IndexByte(z.buf[*pos:], 0); idx != -1 {
-			// Found null, move position past it
-			*pos += idx + 1
+		if idx := bytes.IndexByte(z.buf[:z.remaining], 0); idx != -1 {
+			z.remaining -= idx + 1
 			return nil
 		}
 
-		// Null not found, refill buffer
-		if _, err := io.ReadAtLeast(z.r, z.buf[:], 1); err != nil {
-			return err
-		}
-		*pos = 0
+		// Null not found, consume entire buffer
+		z.remaining = 0
 	}
 }
