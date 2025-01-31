@@ -16,6 +16,7 @@ var (
 	ErrInvalidHeaderByte    = errors.New("invalid header byte")
 	ErrInvalidExtByte       = errors.New("invalid extension byte")
 	ErrReachedMaxBufferSize = errors.New("reached max buffer size")
+	ErrInvalidOffset        = errors.New("offset must be greater than 0")
 )
 
 func expectedType(c byte, expected types.Type) (err error) {
