@@ -7,6 +7,5 @@ replace github.com/webmafia/fast => ../go-fast
 require (
 	github.com/webmafia/fast v0.12.0
 	github.com/webmafia/identifier v0.2.0
+	github.com/klauspost/compress v1.17.11
 )
-
-require github.com/klauspost/compress v1.17.11 // indirect
