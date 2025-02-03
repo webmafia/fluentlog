@@ -2,14 +2,16 @@ package gzip
 
 import (
 	"bytes"
-	"compress/gzip"
+	stdgzip "compress/gzip"
 	"errors"
 	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/gzip"
 	"github.com/webmafia/fast"
+	"github.com/webmafia/fast/bufio"
 )
 
 func sampleData() (b []byte, err error) {
@@ -23,7 +25,8 @@ func sampleData() (b []byte, err error) {
 }
 
 func writeSampleData(buf *bytes.Buffer) (err error) {
-	zw := gzip.NewWriter(buf)
+	zw := stdgzip.NewWriter(buf)
+	// zw := gzip.NewWriter(buf)
 
 	// Setting the Header fields is optional.
 	zw.Name = "a-new-hope.txt"
@@ -44,7 +47,8 @@ func ExampleReader() {
 		panic(err)
 	}
 
-	r, err := NewReader(&buf)
+	br := bufio.NewReader(&buf)
+	r, err := NewReader(br)
 
 	if err != nil {
 		panic(err)
@@ -89,7 +93,8 @@ func BenchmarkReader_Reset(b *testing.B) {
 	}
 
 	bufReader := bytes.NewReader(buf)
-	r, err := NewReader(bufReader)
+	br := bufio.NewReader(bufReader)
+	r, err := NewReader(br)
 
 	if err != nil {
 		b.Fatal(err)
@@ -100,7 +105,7 @@ func BenchmarkReader_Reset(b *testing.B) {
 	for range b.N {
 		bufReader.Reset(buf)
 
-		if err := r.Reset(bufReader); err != nil {
+		if err := r.Reset(br); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -115,8 +120,9 @@ func BenchmarkReader(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	bufReader := bytes.NewReader(buf)
-	r, err := NewReader(bufReader)
+	br := bufio.NewReader(nil)
+	br.ResetBytes(buf)
+	r, err := NewReader(br)
 
 	if err != nil {
 		b.Fatal(err)
@@ -127,9 +133,42 @@ func BenchmarkReader(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		bufReader.Reset(buf)
+		br.ResetBytes(buf)
 
-		if err := r.Reset(bufReader); err != nil {
+		if err := r.Reset(br); err != nil {
+			b.Fatal(err)
+		}
+
+		if _, err := io.CopyBuffer(io.Discard, r, copyBuf[:]); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.ReportMetric(float64(b.N*len(buf))/(1024*1024)/b.Elapsed().Seconds(), "MB/s")
+}
+
+func BenchmarkReader2(b *testing.B) {
+	buf, err := sampleData()
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	br := bytes.NewReader(buf)
+	r, err := gzip.NewReader(br)
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var copyBuf [4096]byte
+
+	b.ResetTimer()
+
+	for range b.N {
+		br.Reset(buf)
+
+		if err := r.Reset(br); err != nil {
 			b.Fatal(err)
 		}
 
