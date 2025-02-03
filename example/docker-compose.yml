@@ -1,6 +1,6 @@
 services:
   fluent-bit:
-    image: fluent/fluent-bit
+    image: fluent/fluent-bit:3.2.5
     ports:
       - 127.0.0.1:24224:24224
     volumes:

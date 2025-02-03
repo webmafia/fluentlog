@@ -98,6 +98,8 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 			if err := sc.Handle(fn); err != nil {
 				log.Println(err)
 			}
+
+			sc.log("disconnected")
 		}()
 	}
 }

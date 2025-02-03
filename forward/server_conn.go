@@ -98,6 +98,15 @@ func (s *ServerConn) transportPhase() (err error) {
 		if err = s.r.NextExpectedType(types.Str); err != nil {
 			return
 		}
+
+		if s.r.Len() < 1 {
+			return fmt.Errorf("too short tag (%d chars), must be min %d chars", s.r.Len(), 1)
+		}
+
+		if s.r.Len() > 64 {
+			return fmt.Errorf("too long tag (%d chars), must be max %d chars", s.r.Len(), 64)
+		}
+
 		s.tag = append(s.tag[:0], s.r.Bin()...)
 
 		// 2) Time or Entries (Array / Bin / Str)
