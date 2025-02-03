@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/klauspost/compress/gzip"
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fast/bufio"
+	"github.com/webmafia/fluentlog/internal/gzip"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
@@ -248,6 +248,7 @@ func (s *ServerConn) packedForwardMode(br *bufio.LimitedReader) (err error) {
 func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err error) {
 	s.log("CompressedPackedForward Mode")
 
+	// r, err := gzip.NewReader(br)
 	r, err := gzip.NewReader(br)
 
 	if err != nil {
