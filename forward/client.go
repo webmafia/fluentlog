@@ -70,7 +70,7 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 	}
 
 	log.Println("connected!")
-	c.r.Release(true)
+	// c.r.Release(true)
 
 	return
 }

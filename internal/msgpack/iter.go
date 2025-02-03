@@ -1,86 +1,64 @@
 package msgpack
 
 import (
-	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/webmafia/fast"
+	"github.com/webmafia/fast/bufio"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
 
 // Low-level iteration of a MessagePack stream.
 type Iterator struct {
-	buf    []byte    // Buffer
-	r      io.Reader // Origin
-	t0     int       // Token head start
-	t1     int       // Token value start
-	t2     int       // Token value end
-	items  int       // Number of array/map items
-	n      int       // Cursor position
-	tot    int       // Total read bytes
-	remain int       // Remaining bytes to read (only used in BinReader)
-	max    int       // Max size of buffer
-	rp     int       // Release point
+	r *bufio.Reader
+	// t0     int // Token head start
+	// t1     int // Token value start
+	// t2     int // Token value end
+	length int // Token value length
+	items  int // Number of array/map items
+	n      int // Cursor position
+	tot    int // Total read bytes
 	err    error
+	byt    byte       // Head byte
+	typ    types.Type // Token type
 }
 
 func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
-	iter := Iterator{
-		r:   r,
-		max: 4096,
+	return Iterator{
+		r: bufio.NewReader(r, maxBufSize...),
 	}
-
-	if len(maxBufSize) > 0 {
-		iter.max = maxBufSize[0]
-	}
-
-	return iter
 }
 
 func (iter *Iterator) Error() error {
 	return iter.err
 }
 
-func (iter *Iterator) setMaxBufSize(size int) {
-	iter.max = size
-
-	if cap(iter.buf) > iter.max {
-		iter.buf = nil
-	}
-}
-
-func (iter *Iterator) Reset(reader io.Reader, maxBufSize ...int) {
-	iter.r = reader
+func (iter *Iterator) Reset(r io.Reader, maxBufSize ...int) {
+	iter.r.ResetReader(r)
 	iter.reset()
 
 	if len(maxBufSize) > 0 {
-		iter.setMaxBufSize(maxBufSize[0])
+		iter.r.SetMaxSize(maxBufSize[0])
 	}
 }
 
 func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
-	if br, ok := iter.r.(*bytes.Reader); ok {
-		br.Reset(b)
-	} else {
-		iter.r = bytes.NewReader(b)
-	}
-
+	iter.r.ResetBytes(b)
 	iter.reset()
 
 	if len(maxBufSize) > 0 {
-		iter.setMaxBufSize(maxBufSize[0])
+		iter.r.SetMaxSize(maxBufSize[0])
 	}
 }
 
 func (iter *Iterator) reset() {
-	iter.buf = iter.buf[:0]
 	iter.n = 0
-	iter.t0 = 0
-	iter.t1 = 0
-	iter.t2 = 0
-	iter.remain = 0
+	// iter.t0 = 0
+	// iter.t1 = 0
+	// iter.t2 = 0
 	iter.tot = 0
 }
 
@@ -96,34 +74,36 @@ func (iter *Iterator) Next() bool {
 	// 	iter.n = iter.t2
 	// 	iter.remain = 0
 	// } else
-	if !iter.skipBytes(iter.t2 - iter.n) {
+	// if !iter.skipBytes(iter.t2 - iter.n) {
+	// 	return false
+	// }
+
+	// iter.t0 = iter.n
+
+	if iter.byt, iter.err = iter.r.ReadByte(); iter.err != nil {
 		return false
 	}
 
-	iter.t0 = iter.n
-
-	if !iter.fill(1) {
-		return false
-	}
-
-	typ, length, isValueLength := types.Get(iter.buf[iter.t0])
-	iter.consume(1)
+	typ, length, isValueLength := types.Get(iter.byt)
+	iter.typ = typ
 
 	if !isValueLength {
-		if !iter.fill(length) {
+		buf, err := iter.r.ReadBytes(length)
+
+		if err != nil {
+			iter.err = err
 			return false
 		}
 
-		iter.consume(length)
-		length = int(uintFromBuf[uint](iter.buf[iter.t0+1 : iter.n]))
+		length = int(uintFromBuf[uint](buf))
 	}
 
-	iter.t1 = iter.n
+	// iter.t1 = iter.n
 
 	switch typ {
 
 	case types.Array, types.Map:
-		iter.t2 = iter.n
+		iter.length = 0
 		iter.items = length
 
 	// Ext types have on extra "type" byte right before the data
@@ -132,7 +112,7 @@ func (iter *Iterator) Next() bool {
 	// 	iter.items = 0
 
 	default:
-		iter.t2 = iter.n + length
+		iter.length = length
 		iter.items = 0
 
 	}
@@ -149,134 +129,119 @@ func (iter *Iterator) NextExpectedType(expected ...types.Type) (err error) {
 		return io.EOF
 	}
 
-	typ := iter.Type()
-
 	for _, t := range expected {
-		if t == typ {
+		if t == iter.typ {
 			return nil
 		}
 	}
 
-	return expectedTypes(iter.buf[iter.t0], expected...)
+	return iter.expectedTypes(expected...)
 }
 
-func (iter *Iterator) Peek(n int) ([]byte, error) {
-	if !iter.fill(n) {
-		return nil, iter.err
-	}
-
-	return iter.buf[iter.n : iter.n+n], nil
-}
-
-func (iter *Iterator) fillNext() bool {
-	if iter.n >= iter.t2 {
-		return true
-	}
-
-	length := iter.Len()
-
-	if !iter.fill(length) {
-		return false
-	}
-
-	iter.consume(length)
-	return true
+func (iter *Iterator) expectedTypes(expected ...types.Type) (err error) {
+	return fmt.Errorf("%w: expected any of %v, got %s", ErrInvalidHeaderByte, expected, iter.typ)
 }
 
 func (iter *Iterator) Type() types.Type {
-	typ, _, _ := types.Get(iter.buf[iter.t0])
-	return typ
+	return iter.typ
 }
 
 func (iter *Iterator) Len() int {
-	return iter.t2 - iter.t1
+	return iter.length
 }
 
 func (iter *Iterator) Items() int {
 	return iter.items
 }
 
+func (iter *Iterator) raw() (b []byte, ok bool) {
+	b, iter.err = iter.r.ReadBytes(iter.length)
+	return b, iter.err == nil
+}
+
 func (iter *Iterator) Bin() []byte {
-	if !iter.fillNext() {
-		return nil
+	if b, ok := iter.raw(); ok {
+		return b
 	}
 
-	return iter.buf[iter.t1:iter.t2]
+	return nil
 }
 
 func (iter *Iterator) Str() string {
-	if !iter.fillNext() {
-		return ""
+	if b, ok := iter.raw(); ok {
+		return fast.BytesToString(b)
 	}
 
-	return fast.BytesToString(iter.buf[iter.t1:iter.t2])
+	return ""
 }
 
 func (iter *Iterator) Bool() bool {
-	return readBoolUnsafe(iter.buf[iter.t0])
+
+	// Booleans are fully contained in the head byte
+	return readBoolUnsafe(iter.byt)
 }
 
 func (iter *Iterator) Float() float64 {
-	if !iter.fillNext() {
-		return 0
+	if b, ok := iter.raw(); ok {
+		return floatFromBuf[float64](b)
 	}
 
-	return floatFromBuf[float64](iter.buf[iter.t1:iter.t2])
+	return 0
 }
 
 func (iter *Iterator) Int() int64 {
-	if !iter.fillNext() {
-		return 0
+	if b, ok := iter.raw(); ok {
+		return readIntUnsafe[int64](iter.byt, b)
 	}
 
-	return readIntUnsafe[int64](iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
+	return 0
 }
 
 func (iter *Iterator) Uint() uint64 {
-	if !iter.fillNext() {
-		return 0
+	if b, ok := iter.raw(); ok {
+		return readIntUnsafe[uint64](iter.byt, b)
 	}
 
-	return readIntUnsafe[uint64](iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
+	return 0
 }
 
 func (iter *Iterator) Time() time.Time {
-	if !iter.fillNext() {
-		return time.Time{}
+	if b, ok := iter.raw(); ok {
+		return readTimeUnsafe(iter.byt, b)
 	}
 
-	return readTimeUnsafe(iter.buf[iter.t0], iter.buf[iter.t1:iter.t2])
+	return time.Time{}
 }
 
-func (iter *Iterator) Value() Value {
-	if !iter.fillNext() {
-		return nil
-	}
-
-	return iter.buf[iter.t0:iter.t2]
+func (iter *Iterator) Reader() *bufio.LimitedReader {
+	return iter.r.LimitReader(iter.length)
 }
+
+// func (iter *Iterator) Value() Value {
+// 	if !iter.fillNext() {
+// 		return nil
+// 	}
+
+// 	return iter.buf[iter.t0:iter.t2]
+// }
 
 func (iter *Iterator) Skip() {
-	typ, length, isValueLength := types.Get(iter.buf[iter.t0])
+	items := iter.items
 
-	if !isValueLength {
-		length = int(uintFromBuf[uint](iter.buf[iter.t0+1 : iter.n]))
-	}
-
-	switch typ {
+	switch iter.typ {
 
 	case types.Array:
 		// Do nothing
 
 	case types.Map:
-		length *= 2
+		items *= 2
 
 	default:
-		return
+		iter.r.Discard(iter.length)
 
 	}
 
-	for range length {
+	for range items {
 		if !iter.Next() {
 			break
 		}
@@ -285,151 +250,18 @@ func (iter *Iterator) Skip() {
 	}
 }
 
-// Ensures that there is at least n bytes of data in buffer
-func (r *Iterator) fill(n int) bool {
-	n -= (len(r.buf) - r.n)
-
-	if n <= 0 {
-		return true
-	}
-
-	return r.fillFromReader(n)
-}
-
-func (r *Iterator) fillFromReader(n int) bool {
-	if r.r == nil {
-		return false
-	}
-
-	readOffset := len(r.buf) // Start reading from the current end of valid data
-
-	if !r.grow(n) {
-		return false
-	}
-
-	r.buf = r.buf[:cap(r.buf)] // Expand buffer to its full capacity
-
-	var err error
-
-	for n > 0 {
-		// Read data from the io.Reader
-		var bytesRead int
-		bytesRead, err = r.r.Read(r.buf[readOffset:])
-
-		if bytesRead > 0 {
-			readOffset += bytesRead
-			n -= bytesRead
-		}
-
-		if err != nil {
-			if err != io.EOF {
-				return r.reportError("fillFromReader", err)
-			}
-
-			if n > 0 {
-				return r.reportError("fillFromReader", io.ErrUnexpectedEOF)
-			}
-
-			break
-		}
-	}
-
-	// Adjust buffer size to include only valid data
-	r.buf = r.buf[:readOffset]
-	return true
-}
-
-// grow copies the buffer to a new, larger buffer so that there are at least n
-// bytes of capacity beyond len(b.buf).
-func (r *Iterator) grow(n int) bool {
-	need := len(r.buf) + n
-
-	// There is already enough capacity
-	if need <= cap(r.buf) {
-		return true
-	}
-
-	// A power-of-two value between 64 and `r.max`
-	c := min(r.max, max(64, roundPow(need)))
-
-	if c < need {
-		return r.reportError("grow", ErrReachedMaxBufferSize)
-	}
-
-	buf := fast.MakeNoZeroCap(len(r.buf), c)
-	copy(buf, r.buf)
-	r.buf = buf
-
-	return true
-}
-
-func (r *Iterator) consume(n int) {
-	r.n += n
-	r.tot += n
-}
-
 // Get total bytes read
 func (r *Iterator) Total() int {
 	return r.tot
 }
 
 // Sets the release point as current position. Anything before this will be kept after release.
-func (r *Iterator) SetReleasePoint() {
-	r.rp = r.t0
+func (iter *Iterator) LockBuffer() bool {
+	return iter.r.Lock()
 }
 
-func (r *Iterator) ResetReleasePoint() {
-	r.rp = 0
-}
-
-// Releases the buffer between the release point and the current position.
-func (iter *Iterator) Release(force ...bool) {
-
-	// TODO: Support partial bin reads.
-	// // If the user calls Release() and the current token is not fully consumed:
-	// if iter.remain > 0 {
-	// 	// The user is effectively discarding the rest of the token
-	// 	// so skip it from the underlying stream.
-	// 	skipLen := iter.t2 - iter.n
-	// 	if skipLen > 0 {
-	// 		if err := skipBytes(iter.r, skipLen); err != nil {
-	// 			iter.reportError("Release/skipPartial", err)
-	// 		}
-	// 	}
-	// 	// Mark the token as finished
-	// 	iter.n = min(iter.t2, len(iter.buf))
-	// 	iter.remain = 0
-	// }
-
-	// Now the token is either fully read or fully skipped,
-	// so calling the internal release() is safe:
-	if iter.shouldRelease() || (len(force) > 0 && force[0]) {
-		iter.release()
-	}
-}
-
-func (iter *Iterator) release() {
-
-	// Ensure we're releasing whole tokens, by skipping to the next token.
-	if !iter.skipBytes(iter.t2 - iter.n) {
-		return
-	}
-
-	// Move all unread bytes back to the release point. Returns number of unread bytes.
-	unreadLen := copy(iter.buf[iter.rp:], iter.buf[iter.n:])
-	iter.buf = iter.buf[:iter.rp+unreadLen]
-
-	// Adjust cursor and buffer
-	iter.n, iter.t0, iter.t1, iter.t2 = iter.rp, iter.rp, iter.rp, iter.rp
-	iter.items = 0
-}
-
-func (r *Iterator) shouldRelease() bool {
-	unused := r.n - r.rp
-	c := cap(r.buf)
-
-	// Release only if:
-	return c >= 4096 && unused > (3*c/4) // Unused data is significant
+func (iter *Iterator) UnlockBuffer() bool {
+	return iter.r.Unlock()
 }
 
 func (iter *Iterator) reportError(op string, err any) bool {
@@ -449,26 +281,37 @@ func (iter *Iterator) reportError(op string, err any) bool {
 	return false
 }
 
-func (iter *Iterator) skipBytes(n int) bool {
+func (iter *Iterator) Any() any {
+	switch iter.typ {
 
-	// Nothing to skip
-	if n <= 0 {
-		return true
+	case types.Bool:
+		return iter.Bool()
+
+	case types.Int:
+		return iter.Int()
+
+	case types.Uint:
+		return iter.Uint()
+
+	case types.Float:
+		return iter.Float()
+
+	case types.Str:
+		return iter.Str()
+
+	case types.Bin:
+		return iter.Bin()
+
+	case types.Ext:
+		return iter.Time()
+
+	case types.Array:
+		return "Array<" + strconv.Itoa(iter.Items()) + ">"
+
+	case types.Map:
+		return "Map<" + strconv.Itoa(iter.Items()) + ">"
+
+	default:
+		return nil
 	}
-
-	l := len(iter.buf)
-	pos := iter.n + n
-
-	if pos < l {
-		iter.n = pos
-	} else {
-		iter.n = l
-		n = pos - l
-
-		if err := skipBytes(iter.r, n); err != nil {
-			return iter.reportError("skipBytes", err)
-		}
-	}
-
-	return true
 }

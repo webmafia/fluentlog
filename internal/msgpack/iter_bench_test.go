@@ -305,7 +305,7 @@ func BenchmarkIterator_BinReader(b *testing.B) {
 		i = 0
 
 		for iter.Next() {
-			_ = iter.BinReader()
+			_ = iter.Reader()
 			i++
 		}
 	}

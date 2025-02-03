@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
+	"github.com/webmafia/fast/bufio"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
@@ -19,6 +21,7 @@ type ServerConn struct {
 	conn net.Conn
 	r    *msgpack.Iterator
 	w    msgpack.Writer
+	tag  []byte
 }
 
 func (s *ServerConn) String() string {
@@ -80,9 +83,6 @@ func (s *ServerConn) transportPhase() (err error) {
 	s.log("initializing transport phase...")
 
 	for {
-		s.r.ResetReleasePoint()
-		s.r.Release()
-
 		// 0) Array of 2-4 items
 		if err = s.r.NextExpectedType(types.Array); err != nil {
 			return
@@ -98,9 +98,7 @@ func (s *ServerConn) transportPhase() (err error) {
 		if err = s.r.NextExpectedType(types.Str); err != nil {
 			return
 		}
-		tag := s.r.Str()
-
-		s.r.SetReleasePoint()
+		s.tag = append(s.tag[:0], s.r.Bin()...)
 
 		// 2) Time or Entries (Array / Bin / Str)
 		if !s.r.Next() {
@@ -111,25 +109,22 @@ func (s *ServerConn) transportPhase() (err error) {
 		switch s.r.Type() {
 
 		case types.Ext, types.Int, types.Uint:
-			if err = s.messageMode(tag, s.r.Time(), evLen); err != nil {
-				return
-			}
-
+			err = s.messageMode(s.r.Time(), evLen)
 			evLen--
 
 		case types.Array:
-			if err = s.forwardMode(tag, s.r.Items()); err != nil {
-				return
-			}
+			err = s.forwardMode(s.r.Items())
 
 		case types.Bin:
-			if err = s.binary(tag); err != nil {
-				return
-			}
+			err = s.binary()
 
 		default:
 			return ErrInvalidEntry
 
+		}
+
+		if err != nil && err != io.EOF {
+			return
 		}
 
 		// Optional options map
@@ -149,7 +144,7 @@ func (s *ServerConn) transportPhase() (err error) {
 //	  {"message": "bar"},       // 3. record
 //	  {"chunk": "<<UniqueId>>"} // 4. option (optional)
 //	]
-func (s *ServerConn) messageMode(tag string, ts time.Time, evLen int) (err error) {
+func (s *ServerConn) messageMode(ts time.Time, evLen int) (err error) {
 	s.log("Message Mode")
 
 	if evLen < 1 {
@@ -171,7 +166,7 @@ func (s *ServerConn) messageMode(tag string, ts time.Time, evLen int) (err error
 	// 	return
 	// }
 
-	return s.entry(tag, ts, s.r, numFields)
+	return s.entry(ts, s.r, numFields)
 }
 
 // The Forward Mode has the following format:
@@ -185,13 +180,11 @@ func (s *ServerConn) messageMode(tag string, ts time.Time, evLen int) (err error
 //	  ],
 //	  {"chunk": "<<UniqueId>>"}           // 3. options (optional)
 //	]
-func (s *ServerConn) forwardMode(tag string, arrLen int) (err error) {
+func (s *ServerConn) forwardMode(arrLen int) (err error) {
 	s.log("Forward Mode")
 
 	for range arrLen {
-		s.r.Release()
-
-		if err = s.iterateEntry(s.r, tag); err != nil {
+		if err = s.iterateEntry(s.r); err != nil {
 			return
 		}
 	}
@@ -199,18 +192,19 @@ func (s *ServerConn) forwardMode(tag string, arrLen int) (err error) {
 	return
 }
 
-func (s *ServerConn) binary(tag string) (err error) {
-	isGzip, err := s.isGzip()
+func (s *ServerConn) binary() (err error) {
+	r := s.r.Reader()
+	isGzip, err := s.isGzip(r)
 
 	if err != nil {
 		return
 	}
 
 	if isGzip {
-		return s.compressedPackedForwardMode(tag)
+		return s.compressedPackedForwardMode(r)
 	}
 
-	return s.packedForwardMode(tag)
+	return s.packedForwardMode(r)
 }
 
 // The PackedForward Mode has the following format:
@@ -220,18 +214,16 @@ func (s *ServerConn) binary(tag string) (err error) {
 //	  "<<MessagePackEventStream>>", // 2. binary (bin) field of concatenated entries
 //	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
 //	]
-func (s *ServerConn) packedForwardMode(tag string) (err error) {
+func (s *ServerConn) packedForwardMode(br *bufio.LimitedReader) (err error) {
 	s.log("PackedForward Mode")
 
 	iter := s.serv.iterPool.Get()
 	defer s.serv.iterPool.Put(iter)
 
-	iter.Reset(s.r.BinReader())
+	iter.Reset(br)
 
 	for {
-		iter.Release()
-
-		if err = s.iterateEntry(iter, tag); err != nil {
+		if err = s.iterateEntry(iter); err != nil {
 			return
 		}
 	}
@@ -244,10 +236,10 @@ func (s *ServerConn) packedForwardMode(tag string) (err error) {
 //	  "<<CompressedMessagePackEventStream>>",         // 2. binary (bin) field of concatenated entries
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
-func (s *ServerConn) compressedPackedForwardMode(tag string) (err error) {
+func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err error) {
 	s.log("CompressedPackedForward Mode")
 
-	r, err := gzip.NewReader(s.r.BinReader())
+	r, err := gzip.NewReader(br)
 
 	if err != nil {
 		return
@@ -261,9 +253,7 @@ func (s *ServerConn) compressedPackedForwardMode(tag string) (err error) {
 	iter.Reset(r)
 
 	for {
-		iter.Release()
-
-		if err = s.iterateEntry(iter, tag); err != nil {
+		if err = s.iterateEntry(iter); err != nil {
 			return
 		}
 	}
@@ -275,7 +265,7 @@ func (s *ServerConn) compressedPackedForwardMode(tag string) (err error) {
 //	  1441588984,               // 1. time
 //	  {"message": "bar"}        // 2. record
 //	]
-func (s *ServerConn) iterateEntry(iter *msgpack.Iterator, tag string) (err error) {
+func (s *ServerConn) iterateEntry(iter *msgpack.Iterator) (err error) {
 
 	// 0) Array of 2 items
 	if err = iter.NextExpectedType(types.Array); err != nil {
@@ -302,15 +292,11 @@ func (s *ServerConn) iterateEntry(iter *msgpack.Iterator, tag string) (err error
 	// 	return
 	// }
 
-	return s.entry(tag, ts, iter, numFields)
+	return s.entry(ts, iter, numFields)
 }
 
-func (s *ServerConn) isGzip() (ok bool, err error) {
-	if s.r.Len() < 3 {
-		return
-	}
-
-	magicNumbers, err := s.r.Peek(3)
+func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
+	magicNumbers, err := r.Peek(3)
 
 	if err != nil {
 		return
@@ -323,21 +309,24 @@ func (s *ServerConn) isGzip() (ok bool, err error) {
 	return
 }
 
-func (s *ServerConn) entry(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
+func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
+	tag := fast.BytesToString(s.tag)
 	log.Println(tag, ts)
+
+	log.Println("receivec entry of", numFields, "fields")
 
 	for range numFields {
 		if !iter.Next() {
 			return iter.Error()
 		}
 
-		key := iter.Value()
+		key := iter.Any()
 
 		if !iter.Next() {
 			return iter.Error()
 		}
 
-		val := iter.Value()
+		val := iter.Any()
 
 		log.Println("  ", key, "=", val)
 	}
@@ -355,11 +344,8 @@ func (s *ServerConn) ack() (err error) {
 	}
 
 	mapLen := s.r.Items()
-	s.r.ResetReleasePoint()
 
 	for range mapLen {
-		s.r.Release()
-
 		if err = s.r.NextExpectedType(types.Str); err != nil {
 			return
 		}
@@ -375,6 +361,7 @@ func (s *ServerConn) ack() (err error) {
 
 		if key != "chunk" {
 			// log.Println("skipped", key, "=", val)
+			s.r.Skip()
 			continue
 		}
 

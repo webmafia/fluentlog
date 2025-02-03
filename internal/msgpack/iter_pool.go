@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/webmafia/fast"
+	"github.com/webmafia/fast/bufio"
 	"github.com/webmafia/fast/types"
 )
 
@@ -59,8 +59,9 @@ func (p *IterPool) Get() *Iterator {
 	}
 
 	return &Iterator{
-		buf: fast.MakeNoZeroCap(0, size),
-		max: bufMaxSize,
+		r: bufio.NewReader(nil),
+		// buf: fast.MakeNoZeroCap(0, size),
+		// max: bufMaxSize,
 	}
 }
 
@@ -68,17 +69,17 @@ func (p *IterPool) Get() *Iterator {
 //
 // The buffer mustn't be accessed after returning to the pool.
 func (p *IterPool) Put(iter *Iterator) {
-	idx := index(cap(iter.buf))
+	// idx := index(cap(iter.buf))
 
-	if atomic.AddUint32(&p.calls[idx], 1) > calibrateCallsThreshold {
-		p.calibrate()
-	}
+	// if atomic.AddUint32(&p.calls[idx], 1) > calibrateCallsThreshold {
+	// 	p.calibrate()
+	// }
 
-	maxSize := int(atomic.LoadUint32(&p.maxSize))
-	if maxSize == 0 || cap(iter.buf) <= maxSize {
-		iter.Reset(nil, p.BufMaxSize)
-		p.pool.Put(iter)
-	}
+	// maxSize := int(atomic.LoadUint32(&p.maxSize))
+	// if maxSize == 0 || cap(iter.buf) <= maxSize {
+	iter.Reset(nil, p.BufMaxSize)
+	p.pool.Put(iter)
+	// }
 }
 
 func (p *IterPool) calibrate() {
