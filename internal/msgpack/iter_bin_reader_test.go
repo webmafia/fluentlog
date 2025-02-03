@@ -3,6 +3,7 @@ package msgpack
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -340,7 +341,8 @@ func BenchmarkBufioReader_ReadByte(b *testing.B) {
 	}
 }
 
-// TestBinReader_SeekByte_Suite thoroughly tests SeekByte with various edge cases.
+// TestBinReader_SeekByte_Suite thoroughly tests SeekByte with various edge cases,
+// including partial reads, multiple refills, and small maxBufSize constraints.
 func TestBinReader_SeekByte_Suite(t *testing.T) {
 
 	t.Run("SeekByte on empty BIN data", func(t *testing.T) {
@@ -437,7 +439,7 @@ func TestBinReader_SeekByte_Suite(t *testing.T) {
 			t.Fatalf("SeekByte('l') unexpected error: %v", err)
 		}
 
-		// The first occurrence of 'l' is the 3rd character in "Hello" (0-based: "H=0,e=1,l=2,l=3,...")
+		// The first occurrence of 'l' is the 3rd character in "Hello" ("H=0,e=1,l=2,l=3,...")
 		ch, err := br.ReadByte()
 		if err != nil {
 			t.Fatalf("ReadByte() error after seeking 'l': %v", err)
@@ -476,7 +478,7 @@ func TestBinReader_SeekByte_Suite(t *testing.T) {
 		}
 	})
 
-	t.Run("SeekByte after some partial reading", func(t *testing.T) {
+	t.Run("SeekByte after partial reading", func(t *testing.T) {
 		raw := append([]byte{0xC4, 0x0D}, []byte("Hello, world!")...)
 
 		iter := NewIterator(nil)
@@ -513,39 +515,15 @@ func TestBinReader_SeekByte_Suite(t *testing.T) {
 
 	t.Run("SeekByte in large data requiring multiple buffer refills", func(t *testing.T) {
 		// We'll create a large data chunk so that internal calls to fill() happen.
-		// Let’s ensure the test buffer is smaller than the data so we get multiple reads.
-		// We'll create a big string that has only one 'Z' near the very end.
-
+		// We'll insert 'Z' near the very end to test SeekByte.
 		chunk := strings.Repeat("Hello, world!", 500) + "Z"
 		data := []byte(chunk)
 
-		// Build the BIN token: 0xC4 <length> ... data ...
-		// We might need BIN16 or BIN32 if length > 255. For example, BIN16 is 0xC5 <2-byte-len>.
-		// length = len(data)
-		buf := new(bytes.Buffer)
-		if len(data) <= 255 {
-			// BIN8
-			buf.WriteByte(0xC4)
-			buf.WriteByte(byte(len(data)))
-		} else if len(data) <= 65535 {
-			// BIN16
-			buf.WriteByte(0xC5)
-			// 2-byte length
-			buf.WriteByte(byte(len(data) >> 8))
-			buf.WriteByte(byte(len(data)))
-		} else {
-			// BIN32
-			buf.WriteByte(0xC6)
-			buf.WriteByte(byte(len(data) >> 24))
-			buf.WriteByte(byte(len(data) >> 16))
-			buf.WriteByte(byte(len(data) >> 8))
-			buf.WriteByte(byte(len(data)))
-		}
-		buf.Write(data)
+		buf := buildBinToken(data)
 
-		// Limit read buffer from underlying Reader to force multiple refills
+		// We'll force multiple small reads from the underlying source by limiting chunk size.
 		limitedReader := &chunkedReader{
-			data:   buf.Bytes(),
+			data:   buf,
 			chunks: 128, // read at most 128 bytes at a time
 		}
 
@@ -575,12 +553,99 @@ func TestBinReader_SeekByte_Suite(t *testing.T) {
 			t.Fatalf("Expected EOF after last byte, got '%c', err=%v", ch, err)
 		}
 	})
+
+	t.Run("SeekByte with small maxBufSize but data fits (multiple expansions)", func(t *testing.T) {
+		// We test a scenario where data is larger than the default buffer but still
+		// smaller than maxBufSize, forcing multiple expansions but NOT reaching the max.
+		chunk := "Begin" + strings.Repeat("ABC", 50) + "Z" + "End"
+		data := []byte(chunk) // ~ 154 bytes
+
+		raw := buildBinToken(data)
+		// We'll let the underlying reader supply everything at once here.
+		// The critical part is that the iterator's maxBufSize is small.
+		rd := bytes.NewReader(raw)
+
+		// Create Iterator with small maxBufSize.
+		// It's bigger than 154, but smaller than the length we might need if we re-fill multiple times.
+		iter := NewIterator(rd, 100)
+		if !iter.Next() {
+			t.Fatalf("Iterator.Next() failed. err: %v", iter.Error())
+		}
+		if iter.Type() != types.Bin {
+			t.Fatalf("Expected Bin type, got %v", iter.Type())
+		}
+		br := iter.BinReader()
+
+		// We expect to find 'Z' after reading a bunch of 'ABC's
+		if err := br.SeekByte('Z'); err != nil {
+			t.Fatalf("SeekByte('Z') error: %v", err)
+		}
+
+		// Confirm next read is 'Z'
+		ch, err := br.ReadByte()
+		if err != nil {
+			t.Fatalf("ReadByte after SeekByte('Z') error: %v", err)
+		}
+		if ch != 'Z' {
+			t.Fatalf("Expected 'Z', got '%c'", ch)
+		}
+
+		// Then we expect "End" after that
+		buf := make([]byte, 3)
+		n, err := br.Read(buf)
+		if err != nil {
+			t.Fatalf("Read error: %v", err)
+		}
+		if string(buf[:n]) != "End" {
+			t.Fatalf("Expected 'End', got '%s'", buf[:n])
+		}
+
+		// Confirm EOF now
+		_, err = br.ReadByte()
+		if err != io.EOF {
+			t.Fatalf("Expected EOF, got %v", err)
+		}
+	})
+
+	t.Run("SeekByte with data exceeding maxBufSize -> expected error", func(t *testing.T) {
+		// We'll produce data bigger than we can ever buffer,
+		// so we expect an internal ErrReachedMaxBufferSize or wrap thereof.
+		chunk := strings.Repeat("Hello, world!", 1000) // ~13k bytes
+
+		// Insert 'Z' so that we might try to seek it, but we won't get that far.
+		chunk = chunk + "Z"
+
+		raw := buildBinToken([]byte(chunk))
+
+		rd := bytes.NewReader(raw)
+		// Set a maxBufSize that's smaller than the total data size
+		iter := NewIterator(rd, 512)
+		if !iter.Next() {
+			// If we fail on the Next() itself, let's see if it's the buffer-size error or something else
+			if !errors.Is(iter.Error(), ErrReachedMaxBufferSize) {
+				t.Fatalf("Expected ErrReachedMaxBufferSize, got %v", iter.Error())
+			}
+			// If it's the expected error, we pass
+			return
+		}
+
+		// If Next() didn't error, try to read and see if we get the error later
+		br := iter.BinReader()
+		err := br.SeekByte('Z')
+		if err == nil {
+			t.Fatal("Expected an error or EOF due to exceeding maxBufSize, but got nil")
+		}
+
+		// We can check if it’s the special error or a wrapped version
+		if !errors.Is(err, ErrReachedMaxBufferSize) && err != io.ErrUnexpectedEOF {
+			t.Fatalf("Expected ErrReachedMaxBufferSize or an EOF, got: %v", err)
+		}
+	})
 }
 
-// ----------------------------------------------------------------------------
-// chunkedReader - a helper io.Reader that only returns data in small chunks.
-// Helps ensure multiple refills occur inside the Iterator.
-
+// ------------------------------------------------------------------------------
+// chunkedReader is a helper io.Reader that returns data in small chunks.
+// This helps ensure multiple refills occur inside the Iterator.
 type chunkedReader struct {
 	data   []byte
 	offset int
@@ -601,4 +666,31 @@ func (r *chunkedReader) Read(p []byte) (n int, err error) {
 	copy(p, r.data[r.offset:r.offset+len(p)])
 	r.offset += len(p)
 	return len(p), nil
+}
+
+// buildBinToken constructs a MessagePack "Bin" token. Automatically chooses BIN8,
+// BIN16, or BIN32 based on length.
+func buildBinToken(data []byte) []byte {
+	size := len(data)
+	var buf bytes.Buffer
+	switch {
+	case size <= 0xFF:
+		// BIN8
+		buf.WriteByte(0xC4)
+		buf.WriteByte(byte(size))
+	case size <= 0xFFFF:
+		// BIN16
+		buf.WriteByte(0xC5)
+		buf.WriteByte(byte(size >> 8))
+		buf.WriteByte(byte(size))
+	default:
+		// BIN32
+		buf.WriteByte(0xC6)
+		buf.WriteByte(byte(size >> 24))
+		buf.WriteByte(byte(size >> 16))
+		buf.WriteByte(byte(size >> 8))
+		buf.WriteByte(byte(size))
+	}
+	buf.Write(data)
+	return buf.Bytes()
 }
