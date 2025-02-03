@@ -3,14 +3,12 @@ package gzip
 import (
 	"bytes"
 	stdgzip "compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"testing"
 	"time"
 
 	"github.com/klauspost/compress/gzip"
-	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/bufio"
 )
 
@@ -40,6 +38,15 @@ func writeSampleData(buf *bytes.Buffer) (err error) {
 	return zw.Close()
 }
 
+func Example_sampleData() {
+	data, _ := sampleData()
+	fmt.Println(len(data), data)
+
+	// Output:
+	//
+	// 117 [31 139 8 24 128 227 232 13 0 255 97 45 110 101 119 45 104 111 112 101 46 116 120 116 0 97 110 32 101 112 105 99 32 115 112 97 99 101 32 111 112 101 114 97 32 98 121 32 71 101 111 114 103 101 32 76 117 99 97 115 0 114 84 200 201 207 75 87 40 201 204 77 85 72 76 207 87 200 204 83 72 84 72 79 204 73 172 168 84 72 75 44 210 1 17 10 137 229 137 149 122 122 122 128 0 0 0 255 255 16 138 163 239 44 0 0 0]
+}
+
 func ExampleReader() {
 	var buf bytes.Buffer
 
@@ -47,7 +54,12 @@ func ExampleReader() {
 		panic(err)
 	}
 
-	br := bufio.NewReader(&buf)
+	if err := writeSampleData(&buf); err != nil {
+		panic(err)
+	}
+
+	// br := bufio.NewReader(&buf)
+	br := bufio.NewReader(&buf).LimitReader(buf.Len())
 	r, err := NewReader(br)
 
 	if err != nil {
@@ -62,7 +74,8 @@ func ExampleReader() {
 
 	fmt.Println(string(data))
 
-	// Output: A long time ago in a galaxy far, far away...
+	// Output:
+	// A long time ago in a galaxy far, far away...A long time ago in a galaxy far, far away...
 }
 
 func ExampleReader_Reset() {
@@ -178,113 +191,4 @@ func BenchmarkReader2(b *testing.B) {
 	}
 
 	b.ReportMetric(float64(b.N*len(buf))/(1024*1024)/b.Elapsed().Seconds(), "MB/s")
-}
-
-func BenchmarkSkipGzipHeader(b *testing.B) {
-	buf, err := sampleData()
-
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	bufReader := bytes.NewReader(buf)
-	b.ResetTimer()
-
-	for range b.N {
-		bufReader.Reset(buf)
-
-		if err := SkipGzipHeader(bufReader); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.ReportMetric(float64(b.N*len(buf))/(1024*1024)/b.Elapsed().Seconds(), "MB/s")
-}
-
-func SkipGzipHeader(r io.Reader) error {
-	// Read the basic 10-byte header
-	var hdr [10]byte
-	if _, err := io.ReadFull(r, fast.NoescapeBytes(hdr[:])); err != nil {
-		return err
-	}
-
-	// Check the gzip magic numbers
-	if hdr[0] != 0x1f || hdr[1] != 0x8b {
-		return errors.New("invalid GZIP magic number")
-	}
-
-	// Check compression method (must be 8 for DEFLATE)
-	if hdr[2] != 8 {
-		return errors.New("unsupported GZIP compression method")
-	}
-
-	// FLG bits
-	flg := hdr[3]
-
-	// If FEXTRA is set, skip the extra field
-	if flg&0x04 != 0 {
-		var extraLen [2]byte
-		if _, err := io.ReadFull(r, fast.NoescapeBytes(extraLen[:])); err != nil {
-			return err
-		}
-		xlen := int(extraLen[0]) | int(extraLen[1])<<8
-		if err := skipN(r, xlen); err != nil {
-			return err
-		}
-	}
-
-	// If FNAME is set, skip the filename (null-terminated string)
-	if flg&0x08 != 0 {
-		if err := skipNullTerminated(r); err != nil {
-			return err
-		}
-	}
-
-	// If FCOMMENT is set, skip the comment (null-terminated string)
-	if flg&0x10 != 0 {
-		if err := skipNullTerminated(r); err != nil {
-			return err
-		}
-	}
-
-	// If FHCRC is set, skip the 2-byte header CRC
-	if flg&0x02 != 0 {
-		if err := skipN(r, 2); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// skipN discards exactly n bytes from r with no heap allocations.
-func skipN(r io.Reader, n int) error {
-	var buf [256]byte // fixed-size local buffer on the stack
-	for n > 0 {
-		chunkSize := 256
-		if n < chunkSize {
-			chunkSize = n
-		}
-		readBytes, err := io.ReadFull(r, fast.NoescapeBytes(buf[:chunkSize]))
-		if err != nil {
-			return err
-		}
-		n -= readBytes
-	}
-	return nil
-}
-
-// skipNullTerminated reads and discards data until it encounters
-// a single zero byte. It uses a single-byte stack buffer, so no
-// heap allocations occur.
-func skipNullTerminated(r io.Reader) error {
-	var one [1]byte
-	for {
-		if _, err := r.Read(fast.NoescapeBytes(one[:])); err != nil {
-			return err
-		}
-		if one[0] == 0 {
-			return nil
-		}
-	}
 }
