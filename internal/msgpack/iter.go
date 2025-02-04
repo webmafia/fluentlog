@@ -13,15 +13,12 @@ import (
 
 // Low-level iteration of a MessagePack stream.
 type Iterator struct {
-	r *bufio.Reader
-	// t0     int // Token head start
-	// t1     int // Token value start
-	// t2     int // Token value end
-	length int // Token value length
-	items  int // Number of array/map items
-	n      int // Cursor position
-	tot    int // Total read bytes
+	r      *bufio.Reader
 	err    error
+	tot    int        // Total read bytes
+	n      int        // Cursor position
+	length int        // Token value length
+	items  int        // Number of array/map items
 	byt    byte       // Head byte
 	typ    types.Type // Token type
 }
@@ -56,29 +53,12 @@ func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
 
 func (iter *Iterator) reset() {
 	iter.n = 0
-	// iter.t0 = 0
-	// iter.t1 = 0
-	// iter.t2 = 0
 	iter.tot = 0
 }
 
 // Read next token. Must be called before any Read* method.
 func (iter *Iterator) Next() bool {
 	iter.err = nil
-
-	// if iter.remain > 0 {
-	// 	// forcibly skip the remainder so we don't corrupt parsing
-	// 	if err := skipBytes(iter.r, iter.remain); err != nil {
-	// 		return iter.reportError("Next/skipRemaining", err)
-	// 	}
-	// 	iter.n = iter.t2
-	// 	iter.remain = 0
-	// } else
-	// if !iter.skipBytes(iter.t2 - iter.n) {
-	// 	return false
-	// }
-
-	// iter.t0 = iter.n
 
 	if iter.byt, iter.err = iter.r.ReadByte(); iter.err != nil {
 		return false
@@ -98,18 +78,11 @@ func (iter *Iterator) Next() bool {
 		length = int(uintFromBuf[uint](buf))
 	}
 
-	// iter.t1 = iter.n
-
 	switch typ {
 
 	case types.Array, types.Map:
 		iter.length = 0
 		iter.items = length
-
-	// Ext types have on extra "type" byte right before the data
-	// case types.Ext:
-	// 	iter.t2 = iter.n + length + 1
-	// 	iter.items = 0
 
 	default:
 		iter.length = length
@@ -154,6 +127,8 @@ func (iter *Iterator) Items() int {
 	return iter.items
 }
 
+// Keeping returned bytes after next call to `Next()` is not safe unless
+// the buffer is locked with `Lock`.
 func (iter *Iterator) raw() (b []byte, ok bool) {
 	b, iter.err = iter.r.ReadBytes(iter.length)
 	return b, iter.err == nil
@@ -216,14 +191,6 @@ func (iter *Iterator) Time() time.Time {
 func (iter *Iterator) Reader() *bufio.LimitedReader {
 	return iter.r.LimitReader(iter.length)
 }
-
-// func (iter *Iterator) Value() Value {
-// 	if !iter.fillNext() {
-// 		return nil
-// 	}
-
-// 	return iter.buf[iter.t0:iter.t2]
-// }
 
 func (iter *Iterator) Skip() {
 	items := iter.items

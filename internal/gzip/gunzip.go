@@ -159,10 +159,10 @@ func (z *Reader) skipHeader() (err error) {
 			return errors.New("gzip: failed to init decompressor")
 		}
 	} else {
-		z.decompressor.Reset(z.br, nil)
+		err = z.decompressor.Reset(z.br, nil)
 	}
 
-	return nil
+	return
 }
 
 // skipBytes skips `n` bytes.

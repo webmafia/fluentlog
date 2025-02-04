@@ -10,7 +10,7 @@ type Pool struct {
 	pool sync.Pool
 }
 
-func (pool *Pool) Acquire(br bufio.BufioReader) (r *Reader, err error) {
+func (pool *Pool) Get(br bufio.BufioReader) (r *Reader, err error) {
 	var ok bool
 
 	if r, ok = pool.pool.Get().(*Reader); ok {
@@ -20,7 +20,7 @@ func (pool *Pool) Acquire(br bufio.BufioReader) (r *Reader, err error) {
 	return NewReader(br)
 }
 
-func (pool *Pool) Release(r *Reader) {
+func (pool *Pool) Put(r *Reader) {
 	r.Reset(nil)
 	pool.pool.Put(r)
 }

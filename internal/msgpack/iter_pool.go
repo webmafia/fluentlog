@@ -49,37 +49,30 @@ func (p *IterPool) Get() *Iterator {
 	size := int(atomic.LoadUint32(&p.defaultSize))
 
 	if size == 0 {
-		size = 64
+		size = min(p.BufMaxSize, 4096)
 	}
 
-	bufMaxSize := p.BufMaxSize
+	iter := &Iterator{r: bufio.NewReader(nil, p.BufMaxSize)}
+	iter.r.ResetSize(size)
 
-	if bufMaxSize <= 0 {
-		bufMaxSize = 4096
-	}
-
-	return &Iterator{
-		r: bufio.NewReader(nil),
-		// buf: fast.MakeNoZeroCap(0, size),
-		// max: bufMaxSize,
-	}
+	return iter
 }
 
 // Put releases byte buffer obtained via Get to the pool.
 //
 // The buffer mustn't be accessed after returning to the pool.
 func (p *IterPool) Put(iter *Iterator) {
-	// idx := index(cap(iter.buf))
+	idx := index(iter.r.MaxUsed())
 
-	// if atomic.AddUint32(&p.calls[idx], 1) > calibrateCallsThreshold {
-	// 	p.calibrate()
-	// }
+	if atomic.AddUint32(&p.calls[idx], 1) > calibrateCallsThreshold {
+		p.calibrate()
+	}
 
-	// maxSize := int(atomic.LoadUint32(&p.maxSize))
-	// if maxSize == 0 || cap(iter.buf) <= maxSize {
-	iter.Reset(nil, p.BufMaxSize)
-	p.pool.Put(iter)
-	// }
+	maxSize := int(atomic.LoadUint32(&p.maxSize))
+	if maxSize == 0 || iter.r.Size() <= maxSize {
+		iter.Reset(nil, p.BufMaxSize)
+		p.pool.Put(iter)
+	}
 }
 
 func (p *IterPool) calibrate() {
