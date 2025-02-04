@@ -32,7 +32,7 @@ func startClient(ctx context.Context) (err error) {
 
 	// cli.Connect(ctx)
 
-	for i := range 1 {
+	for i := range 100 {
 		l.Log("hello world",
 			"count", i+1,
 		)

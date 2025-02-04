@@ -1,6 +1,7 @@
 package msgpack
 
 import (
+	"io"
 	"math/bits"
 	"sync"
 	"sync/atomic"
@@ -40,10 +41,12 @@ type IterPool struct {
 //
 // The byte buffer may be returned to the pool via Put after the use
 // in order to minimize GC overhead.
-func (p *IterPool) Get() *Iterator {
-	v := p.pool.Get()
-	if v != nil {
-		return v.(*Iterator)
+func (p *IterPool) Get(r io.Reader) (iter *Iterator) {
+	var ok bool
+
+	if iter, ok = p.pool.Get().(*Iterator); ok {
+		iter.Reset(r)
+		return
 	}
 
 	size := int(atomic.LoadUint32(&p.defaultSize))
@@ -52,7 +55,7 @@ func (p *IterPool) Get() *Iterator {
 		size = min(p.BufMaxSize, 4096)
 	}
 
-	iter := &Iterator{r: bufio.NewReader(nil, p.BufMaxSize)}
+	iter = &Iterator{r: bufio.NewReader(r, p.BufMaxSize)}
 	iter.r.ResetSize(size)
 
 	return iter

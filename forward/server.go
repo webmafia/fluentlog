@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/webmafia/fast/buffer"
+	"github.com/webmafia/fluentlog/internal/gzip"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
@@ -14,6 +15,7 @@ type Server struct {
 	opt      ServerOptions
 	bufPool  buffer.Pool
 	iterPool msgpack.IterPool
+	gzipPool gzip.Pool
 }
 
 type ServerOptions struct {
@@ -80,19 +82,21 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 		}
 
 		go func() {
-			iter := s.iterPool.Get()
+			iter := s.iterPool.Get(conn)
 			defer s.iterPool.Put(iter)
-
-			iter.Reset(conn)
 
 			wBuf := s.bufPool.Get()
 			defer s.bufPool.Put(wBuf)
+
+			tag := s.bufPool.Get()
+			defer s.bufPool.Put(tag)
 
 			sc := ServerConn{
 				serv: s,
 				conn: conn,
 				r:    iter,
 				w:    msgpack.NewWriter(conn, wBuf),
+				tag:  tag,
 			}
 
 			if err := sc.Handle(fn); err != nil {

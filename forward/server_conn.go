@@ -8,10 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fast/bufio"
-	"github.com/webmafia/fluentlog/internal/gzip"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 	"github.com/webmafia/fluentlog/internal/msgpack/types"
 )
@@ -21,7 +19,7 @@ type ServerConn struct {
 	conn net.Conn
 	r    *msgpack.Iterator
 	w    msgpack.Writer
-	tag  []byte
+	tag  *buffer.Buffer
 }
 
 func (s *ServerConn) String() string {
@@ -106,8 +104,8 @@ func (s *ServerConn) transportPhase() (err error) {
 		if s.r.Len() > 64 {
 			return fmt.Errorf("too long tag (%d chars), must be max %d chars", s.r.Len(), 64)
 		}
-
-		s.tag = append(s.tag[:0], s.r.Bin()...)
+		s.tag.Reset()
+		s.tag.Write(s.r.Bin())
 
 		// 2) Time or Entries (Array / Bin / Str)
 		if !s.r.Next() {
@@ -226,10 +224,8 @@ func (s *ServerConn) binary() (err error) {
 func (s *ServerConn) packedForwardMode(br *bufio.LimitedReader) (err error) {
 	s.log("PackedForward Mode")
 
-	iter := s.serv.iterPool.Get()
+	iter := s.serv.iterPool.Get(br)
 	defer s.serv.iterPool.Put(iter)
-
-	iter.Reset(br)
 
 	for {
 		if err = s.iterateEntry(iter); err != nil {
@@ -249,18 +245,17 @@ func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err e
 	s.log("CompressedPackedForward Mode")
 
 	// r, err := gzip.NewReader(br)
-	r, err := gzip.NewReader(br)
+	// r, err := gzip.NewReader(br)
+	r, err := s.serv.gzipPool.Get(br)
 
 	if err != nil {
 		return
 	}
 
-	defer r.Close()
+	defer s.serv.gzipPool.Put(r)
 
-	iter := s.serv.iterPool.Get()
+	iter := s.serv.iterPool.Get(r)
 	defer s.serv.iterPool.Put(iter)
-
-	iter.Reset(r)
 
 	for {
 		if err = s.iterateEntry(iter); err != nil {
@@ -320,7 +315,7 @@ func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
 }
 
 func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
-	tag := fast.BytesToString(s.tag)
+	tag := s.tag.String()
 	log.Println(tag, ts)
 
 	log.Println("receivec entry of", numFields, "fields")
