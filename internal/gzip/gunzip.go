@@ -7,6 +7,7 @@ package gzip
 import (
 	"compress/gzip"
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"github.com/klauspost/compress/flate"
@@ -33,6 +34,11 @@ var (
 
 var le = binary.LittleEndian
 
+type inflate interface {
+	flate.Resetter
+	io.ReadCloser
+}
+
 // A Reader is an io.Reader that can be read to retrieve
 // uncompressed data from a gzip-format compressed file.
 //
@@ -41,7 +47,7 @@ var le = binary.LittleEndian
 // return the concatenation of the uncompressed data of each.
 type Reader struct {
 	br           bufio.BufioReader
-	decompressor io.ReadCloser
+	decompressor inflate
 }
 
 // NewReader creates a new Reader reading the given reader.
@@ -147,9 +153,13 @@ func (z *Reader) skipHeader() (err error) {
 
 	// Initialize or reset the DEFLATE reader
 	if z.decompressor == nil {
-		z.decompressor = flate.NewReader(z.br)
+		if dec, ok := flate.NewReader(z.br).(inflate); ok {
+			z.decompressor = dec
+		} else {
+			return errors.New("gzip: failed to init decompressor")
+		}
 	} else {
-		z.decompressor.(flate.Resetter).Reset(z.br, nil)
+		z.decompressor.Reset(z.br, nil)
 	}
 
 	return nil
