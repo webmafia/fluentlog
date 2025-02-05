@@ -32,9 +32,10 @@ func startClient(ctx context.Context) (err error) {
 
 	// cli.Connect(ctx)
 
-	for i := range 100 {
-		l.Log("hello world",
+	for i := range 1 {
+		l.Info("hello world",
 			"count", i+1,
+			"foo", "bar",
 		)
 	}
 
