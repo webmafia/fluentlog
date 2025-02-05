@@ -30,10 +30,16 @@ func startClient(ctx context.Context) (err error) {
 	l := fluentlog.NewLogger(cli)
 	defer l.Close()
 
+	sub := l.With(
+		"valueFrom", "subLogger",
+	)
+
+	defer sub.Release()
+
 	// cli.Connect(ctx)
 
 	for i := range 10 {
-		l.Info("hello world",
+		sub.Info("hello world",
 			"count", i+1,
 			"foo", "bar",
 			fluentlog.StackTrace(),

@@ -7,7 +7,7 @@ const (
 	ALERT
 	CRIT
 	ERR
-	WARNING
+	WARN
 	NOTICE
 	INFO
 	DEBUG
