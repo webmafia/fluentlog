@@ -1,7 +1,6 @@
 package fluentlog
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -119,47 +118,7 @@ func (l *Logger) log(sev Severity, msg string, args []any) (id identifier.ID) {
 		b.B[x] += n
 	}
 
-	fmt.Println(b.B)
-
 	l.ch <- b
-	return
-}
-
-func (l *Logger) Log(msg string, meta ...any) (id identifier.ID) {
-	if l.closed.Load() {
-		return
-	}
-
-	b := l.pool.Get()
-	id = identifier.Generate()
-
-	b.B = msgpack.AppendArrayHeader(b.B, 3)
-	b.B = msgpack.AppendString(b.B, "foo.bar")
-	b.B = msgpack.AppendTimestamp(b.B, id.Time(), msgpack.TsFluentd)
-
-	n := len(meta)
-	n -= n % 2
-
-	b.B = msgpack.AppendMapHeader(b.B, (n/2)+2)
-
-	b.B = msgpack.AppendString(b.B, "@id")
-	b.B = msgpack.AppendTextAppender(b.B, id)
-
-	b.B = msgpack.AppendString(b.B, "message")
-	b.B = msgpack.AppendString(b.B, msg)
-
-	for i := 0; i < n; i++ {
-		b.B = msgpack.AppendAny(b.B, meta[i])
-	}
-
-	// Try to write 10 times per capacity of the channel
-	// if !tryWrite(l.ch, b, cap(l.ch)*100) {
-	// 	l.pool.Put(b)
-	// 	id = 0
-	// }
-
-	l.ch <- b
-
 	return
 }
 

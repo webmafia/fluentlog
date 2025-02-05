@@ -1,13 +1,16 @@
 package fluentlog
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
 
 func BenchmarkLogger(b *testing.B) {
-	log := NewLogger(nil)
+	log := NewLogger(io.Discard)
 	b.ResetTimer()
 
 	for range b.N {
-		_ = log.Log("hello world",
+		_ = log.Info("hello world",
 			"foo", "bar",
 			"foo", "bar",
 			"foo", "bar",

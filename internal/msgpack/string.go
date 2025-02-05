@@ -118,3 +118,25 @@ func AppendStringUnknownLength(dst []byte, fn func(dst []byte) []byte) []byte {
 
 	return dst
 }
+
+// AppendStringUnknownLength appends a string with an unknown length, but max 255 characters.
+// The string data is appended using the provided function `fn`. Returns the updated byte slice.
+func AppendStringMax255(dst []byte, fn func(dst []byte) []byte) []byte {
+	// We don't know the length of the string, so assume the longest possible string.
+	start := len(dst)
+	dst = append(dst, 0xd9, 0)
+	sizeFrom := len(dst)
+	dst = fn(dst)
+	sizeTo := len(dst)
+	l := sizeTo - sizeFrom
+
+	if l > 255 {
+		l = 255
+		dst = dst[:sizeFrom+l]
+	}
+
+	// Now we know how many bytes were appended - update the header accordingly.
+	dst[start+1] = byte(l)
+
+	return dst
+}

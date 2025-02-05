@@ -32,10 +32,11 @@ func startClient(ctx context.Context) (err error) {
 
 	// cli.Connect(ctx)
 
-	for i := range 1 {
+	for i := range 10 {
 		l.Info("hello world",
 			"count", i+1,
 			"foo", "bar",
+			fluentlog.StackTrace(),
 		)
 	}
 
