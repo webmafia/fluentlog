@@ -7,6 +7,7 @@ import (
 	"os/signal"
 
 	"github.com/webmafia/fluentlog"
+	"github.com/webmafia/fluentlog/filebuf"
 	"github.com/webmafia/fluentlog/forward"
 )
 
@@ -27,7 +28,12 @@ func startClient(ctx context.Context) (err error) {
 		SharedKey: []byte("secret"),
 	})
 
-	l := fluentlog.NewLogger(cli)
+	_ = cli
+
+	f := filebuf.NewFileBuffer("log-buffer.bin")
+	defer f.Close()
+
+	l := fluentlog.NewLogger(f)
 	defer l.Close()
 
 	sub := l.With(
