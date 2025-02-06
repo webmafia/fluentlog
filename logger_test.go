@@ -6,7 +6,7 @@ import (
 )
 
 func BenchmarkLogger(b *testing.B) {
-	log := NewLogger(io.Discard)
+	log := NewLogger(NewInstance(io.Discard))
 	b.ResetTimer()
 
 	for range b.N {
@@ -26,7 +26,7 @@ func BenchmarkLogger(b *testing.B) {
 }
 
 func BenchmarkSubLogger(b *testing.B) {
-	log := NewLogger(io.Discard)
+	log := NewLogger(NewInstance(io.Discard))
 	l := log.With(
 		"foo", "bar",
 		"foo", "bar",
