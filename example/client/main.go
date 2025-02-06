@@ -33,8 +33,10 @@ func startClient(ctx context.Context) (err error) {
 	f := filebuf.NewFileBuffer("log-buffer.bin")
 	defer f.Close()
 
-	l := fluentlog.NewLogger(f)
-	defer l.Close()
+	inst := fluentlog.NewInstance(f)
+	defer inst.Close()
+
+	l := fluentlog.NewLogger(inst)
 
 	sub := l.With(
 		"valueFrom", "subLogger",
