@@ -99,13 +99,6 @@ func (c *Client) Write(b []byte) (n int, err error) {
 	return c.conn.Write(b)
 }
 
-// func (c *Client) Send(msg fluentlog.Message) (err error) {
-// 	n, err := msg.WriteTo(c.conn)
-
-// 	log.Println("sent", n, "bytes")
-// 	return
-// }
-
 func (c *Client) Writer() msgpack.Writer {
 	return c.w
 }

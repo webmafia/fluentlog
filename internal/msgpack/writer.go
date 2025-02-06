@@ -103,3 +103,27 @@ func (w Writer) WriteTimestamp(t time.Time, format ...TsFormat) {
 func (w Writer) WriteCustom(fn func([]byte) []byte) {
 	w.b.B = fn(w.b.B)
 }
+
+func (w Writer) WriteBinaryReader(size int, r io.Reader) (err error) {
+	w.b.B = appendBinaryHeader(w.b.B, size)
+
+	if err = w.Flush(); err != nil {
+		return
+	}
+
+	if w.w != nil {
+		if err = w.b.Grow(4096); err != nil {
+			return
+		}
+
+		w.b.B = w.b.B[:cap(w.b.B)]
+
+		if _, err = io.CopyBuffer(w.w, r, w.b.B); err != nil {
+			return
+		}
+
+		w.b.Reset()
+	}
+
+	return
+}

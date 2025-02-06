@@ -9,7 +9,11 @@ import (
 // AppendBinary appends a MessagePack binary header and the binary `data` to `dst`.
 // Returns the updated byte slice.
 func AppendBinary(dst []byte, data []byte) []byte {
-	l := len(data)
+	dst = appendBinaryHeader(dst, len(data))
+	return append(dst, data...)
+}
+
+func appendBinaryHeader(dst []byte, l int) []byte {
 	switch {
 	case l <= 0xFF:
 		dst = append(dst, 0xc4, byte(l))
@@ -18,7 +22,7 @@ func AppendBinary(dst []byte, data []byte) []byte {
 	default:
 		dst = append(dst, 0xc6, byte(l>>24), byte(l>>16), byte(l>>8), byte(l))
 	}
-	return append(dst, data...)
+	return dst
 }
 
 // ReadBinary reads a MessagePack binary object from `src` starting at `offset`.
