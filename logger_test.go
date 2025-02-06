@@ -45,3 +45,25 @@ func BenchmarkSubLogger(b *testing.B) {
 		_ = l.Info("hello world")
 	}
 }
+
+func BenchmarkLogger_With(b *testing.B) {
+	log := NewLogger(NewInstance(io.Discard))
+	b.ResetTimer()
+
+	for range b.N {
+		l := log.With(
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+			"foo", "bar",
+		)
+
+		l.Release()
+	}
+}

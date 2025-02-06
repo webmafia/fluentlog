@@ -52,8 +52,6 @@ func (inst *Instance) Logger() *Logger {
 		}
 	}
 
-	l.fieldData = inst.bufPool.Get()
-
 	return l
 }
 
@@ -77,7 +75,7 @@ func (inst *Instance) Close() {
 	}
 }
 
-func (inst *Instance) log(sev Severity, msg string, args []any, extraData []byte, extraCount uint8) (id identifier.ID) {
+func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
 	if inst.closed.Load() {
 		return
 	}
@@ -105,7 +103,7 @@ func (inst *Instance) log(sev Severity, msg string, args []any, extraData []byte
 	b.B = msgpack.AppendString(b.B, msg)
 
 	if extraCount > 0 {
-		b.B = append(b.B, extraData...)
+		b.B = append(b.B, extraData.B...)
 		b.B[x] += extraCount
 	}
 

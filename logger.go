@@ -16,23 +16,32 @@ func NewLogger(inst *Instance) *Logger {
 }
 
 func (l *Logger) Debug(msg string, args ...any) identifier.ID {
-	return l.inst.log(DEBUG, msg, args, l.fieldData.B, l.fieldCount)
+	return l.inst.log(DEBUG, msg, args, l.fieldData, l.fieldCount)
 }
 func (l *Logger) Info(msg string, args ...any) identifier.ID {
-	return l.inst.log(INFO, msg, args, l.fieldData.B, l.fieldCount)
+	return l.inst.log(INFO, msg, args, l.fieldData, l.fieldCount)
 }
 func (l *Logger) Warn(msg string, args ...any) identifier.ID {
-	return l.inst.log(WARN, msg, args, l.fieldData.B, l.fieldCount)
+	return l.inst.log(WARN, msg, args, l.fieldData, l.fieldCount)
 }
 func (l *Logger) Error(msg string, args ...any) identifier.ID {
-	return l.inst.log(ERR, msg, args, l.fieldData.B, l.fieldCount)
+	return l.inst.log(ERR, msg, args, l.fieldData, l.fieldCount)
 }
 
 // With implements Instance.
 func (l *Logger) With(args ...any) *Logger {
 	log := l.inst.Logger()
-	log.fieldData.B = append(log.fieldData.B, l.fieldData.B...)
-	log.fieldCount = l.fieldCount + appendArgs(log.fieldData, args)
+
+	if len(args) > 0 {
+		log.fieldData = l.inst.bufPool.Get()
+
+		if l.fieldData != nil {
+			log.fieldData.B = append(log.fieldData.B, l.fieldData.B...)
+			log.fieldCount = l.fieldCount
+		}
+
+		log.fieldCount += appendArgs(log.fieldData, args)
+	}
 
 	return log
 }
