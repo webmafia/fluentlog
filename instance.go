@@ -125,7 +125,7 @@ func (inst *Instance) worker() {
 			log.Println(err)
 		}
 
-		inst.logPool.Put(b)
+		inst.bufPool.Put(b)
 	}
 }
 
