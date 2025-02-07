@@ -3,6 +3,7 @@ package forward
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -99,6 +100,25 @@ func (c *Client) Write(b []byte) (n int, err error) {
 	return c.conn.Write(b)
 }
 
-func (c *Client) Writer() msgpack.Writer {
-	return c.w
+func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
+	if err = c.ensureConnection(); err != nil {
+		return
+	}
+
+	c.w.WriteArrayHeader(3)
+
+	// 1. Tag (string)
+	c.w.WriteString(tag)
+
+	// 2. Entries (CompressedMessagePackEventStream)
+	if err = c.w.WriteBinaryReader(size, r); err != nil {
+		return
+	}
+
+	// 3. Options
+	c.w.WriteMapHeader(1)
+	c.w.WriteString("compressed")
+	c.w.WriteString("gzip")
+
+	return
 }

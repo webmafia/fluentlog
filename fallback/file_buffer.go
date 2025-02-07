@@ -1,4 +1,4 @@
-package filebuf
+package fallback
 
 import (
 	"io"

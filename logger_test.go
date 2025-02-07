@@ -6,7 +6,13 @@ import (
 )
 
 func BenchmarkLogger(b *testing.B) {
-	log := NewLogger(NewInstance(io.Discard))
+	inst, err := NewInstance(io.Discard)
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	log := inst.Logger()
 	b.ResetTimer()
 
 	for range b.N {
@@ -26,7 +32,13 @@ func BenchmarkLogger(b *testing.B) {
 }
 
 func BenchmarkSubLogger(b *testing.B) {
-	log := NewLogger(NewInstance(io.Discard))
+	inst, err := NewInstance(io.Discard)
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	log := inst.Logger()
 	l := log.With(
 		"foo", "bar",
 		"foo", "bar",
@@ -47,7 +59,13 @@ func BenchmarkSubLogger(b *testing.B) {
 }
 
 func BenchmarkLogger_With(b *testing.B) {
-	log := NewLogger(NewInstance(io.Discard))
+	inst, err := NewInstance(io.Discard)
+
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	log := inst.Logger()
 	b.ResetTimer()
 
 	for range b.N {

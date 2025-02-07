@@ -1,28 +1,48 @@
 package fluentlog
 
 import (
+	"errors"
 	"io"
 	"log"
 	"sync"
-	"sync/atomic"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
+	"github.com/webmafia/fluentlog/fallback"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 	"github.com/webmafia/identifier"
 )
 
 type Instance struct {
-	cli     io.Writer
-	opt     Options
-	bufPool buffer.Pool
-	logPool sync.Pool
-	ch      chan *buffer.Buffer
-	wg      sync.WaitGroup
-	closed  atomic.Bool
+	cli        io.Writer
+	opt        Options
+	bufPool    buffer.Pool         // Pool of buffers
+	logPool    sync.Pool           // Pool of loggers
+	queue      chan *buffer.Buffer // Main queue (buffered)
+	fbQueue    chan *buffer.Buffer // Fallback queue (unbuffered)
+	fbNonEmpty chan struct{}       // Whether fbQueue is non-empty (exactly 1 in buffer size)
+	close      chan struct{}       // Close channel
+	wg         sync.WaitGroup
 }
 
-func NewInstance(cli io.Writer, options ...Options) *Instance {
+type Options struct {
+	Tag           string
+	BufferSize    int
+	WriteBehavior WriteBehavior
+	Fallback      *fallback.DirBuffer
+}
+
+func (opt *Options) setDefaults() {
+	if opt.Tag == "" {
+		opt.Tag = "fluentlog"
+	}
+
+	if opt.BufferSize <= 0 {
+		opt.BufferSize = 16
+	}
+}
+
+func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 	var opt Options
 
 	if len(options) > 0 {
@@ -32,15 +52,31 @@ func NewInstance(cli io.Writer, options ...Options) *Instance {
 	opt.setDefaults()
 
 	inst := &Instance{
-		cli: cli,
-		opt: opt,
-		ch:  make(chan *buffer.Buffer, opt.BufferSize),
+		cli:   cli,
+		opt:   opt,
+		queue: make(chan *buffer.Buffer, opt.BufferSize),
+	}
+
+	if inst.opt.WriteBehavior == Fallback {
+		if inst.opt.Fallback == nil {
+			return nil, errors.New("WriteBehavior set to 'Fallback', but not Fallblack provided")
+		}
+
+		if _, ok := inst.cli.(BatchWriter); !ok {
+			return nil, errors.New("WriteBehavior set to 'Fallback', but client doesn't implement BatchWriter")
+		}
+
+		inst.fbQueue = make(chan *buffer.Buffer)
+		inst.fbNonEmpty = make(chan struct{}, 1)
+
+		inst.wg.Add(1)
+		go inst.fallbackWorker()
 	}
 
 	inst.wg.Add(1)
 	go inst.worker()
 
-	return inst
+	return inst, nil
 }
 
 func (inst *Instance) Logger() *Logger {
@@ -63,11 +99,7 @@ func (inst *Instance) Release(l *Logger) {
 }
 
 func (inst *Instance) Close() {
-	if inst.closed.Swap(true) {
-		return
-	}
-
-	close(inst.ch)
+	close(inst.close)
 	inst.wg.Wait()
 
 	if closer, ok := inst.cli.(io.WriteCloser); ok {
@@ -75,8 +107,17 @@ func (inst *Instance) Close() {
 	}
 }
 
+func (inst *Instance) closed() bool {
+	select {
+	case <-inst.close:
+		return true
+	default:
+		return false
+	}
+}
+
 func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
-	if inst.closed.Load() {
+	if inst.closed() {
 		return
 	}
 
@@ -109,21 +150,76 @@ func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffe
 
 	b.B[x] += appendArgs(b, args)
 
-	inst.ch <- b
+	inst.queueMessage(b)
 	return
+}
+
+func (inst *Instance) queueMessage(b *buffer.Buffer) {
+	if inst.opt.WriteBehavior == Block {
+		inst.queue <- b
+		return
+	}
+
+	select {
+
+	// Try to put message in queue
+	case inst.queue <- b:
+
+	// If the queue is full
+	default:
+		if inst.opt.WriteBehavior == Fallback {
+			inst.fbQueue <- b
+		} else {
+			inst.bufPool.Put(b)
+		}
+	}
 }
 
 func (inst *Instance) worker() {
 	defer inst.wg.Done()
 
-	for b := range inst.ch {
-		err := inst.write(b.B)
+	for {
+		select {
 
-		if err != nil {
-			log.Println(err)
+		case b := <-inst.queue:
+			if err := inst.write(b.B); err != nil {
+				log.Println(err)
+			}
+
+			inst.bufPool.Put(b)
+
+		case <-inst.close:
+			for {
+				select {
+
+				case b := <-inst.queue:
+					if err := inst.write(b.B); err != nil {
+						log.Println(err)
+					}
+
+					inst.bufPool.Put(b)
+
+				default:
+					return
+
+				}
+			}
 		}
+	}
+}
+
+func (inst *Instance) fallbackWorker() {
+	defer inst.wg.Done()
+
+	for b := range inst.fbQueue {
 
 		inst.bufPool.Put(b)
+
+		// Tell that there are messages in the fallback buffer
+		select {
+		case inst.fbNonEmpty <- struct{}{}:
+		default:
+		}
 	}
 }
 
