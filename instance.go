@@ -241,7 +241,12 @@ func (inst *Instance) worker() {
 func (inst *Instance) sendToCli(b *buffer.Buffer) {
 	log.Println("received msg to main")
 	if _, err := inst.cli.Write(fast.NoescapeBytes(b.B)); err != nil {
-		log.Println(err)
+		log.Println("error while writing to cli:", err)
+
+		if inst.opt.WriteBehavior == Fallback {
+			inst.fbQueue <- b
+			return
+		}
 	}
 
 	inst.bufPool.Put(b)
