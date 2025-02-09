@@ -119,6 +119,65 @@ func AppendStringUnknownLength(dst []byte, fn func(dst []byte) []byte) []byte {
 	return dst
 }
 
+// AppendStringDynamic appends a MessagePack-encoded string to dst.
+// The string data is produced by calling fn. The function uses the
+// smallest header possible without allocating additional memory (aside from appending).
+func AppendStringDynamic(dst []byte, fn func(dst []byte) []byte) []byte {
+	// Reserve worst-case header: 5 bytes for str32.
+	start := len(dst)
+	dst = append(dst, 0xdb, 0, 0, 0, 0)
+
+	// Append the string bytes using the provided function.
+	sizeFrom := len(dst)
+	dst = fn(dst)
+	sizeTo := len(dst)
+	l := sizeTo - sizeFrom // Actual string length
+
+	// Determine the minimal header length needed.
+	var headerLen int
+	switch {
+	case l <= 31:
+		headerLen = 1 // fixstr: 1 byte header
+	case l <= 255:
+		headerLen = 2 // str8: marker + 1 byte length
+	case l <= 65535:
+		headerLen = 3 // str16: marker + 2 byte length
+	default:
+		headerLen = 5 // str32: marker + 4 byte length
+	}
+
+	// If a smaller header is possible, shift the string data left.
+	shift := 5 - headerLen
+	if shift > 0 {
+		// Move the string bytes left by 'shift' bytes.
+		copy(dst[start+headerLen:], dst[start+5:])
+		// Adjust the slice length.
+		dst = dst[:sizeTo-shift]
+	}
+
+	// Write the appropriate MessagePack header.
+	switch headerLen {
+	case 1:
+		// fixstr: high 3 bits 101 and low 5 bits are length.
+		dst[start] = 0xa0 | byte(l)
+	case 2:
+		dst[start] = 0xd9
+		dst[start+1] = byte(l)
+	case 3:
+		dst[start] = 0xda
+		dst[start+1] = byte(l >> 8)
+		dst[start+2] = byte(l)
+	case 5:
+		dst[start] = 0xdb
+		dst[start+1] = byte(l >> 24)
+		dst[start+2] = byte(l >> 16)
+		dst[start+3] = byte(l >> 8)
+		dst[start+4] = byte(l)
+	}
+
+	return dst
+}
+
 // AppendStringUnknownLength appends a string with an unknown length, but max 255 characters.
 // The string data is appended using the provided function `fn`. Returns the updated byte slice.
 func AppendStringMax255(dst []byte, fn func(dst []byte) []byte) []byte {

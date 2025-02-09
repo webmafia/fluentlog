@@ -28,6 +28,20 @@ func (l *Logger) Error(msg string, args ...any) identifier.ID {
 	return l.inst.log(ERR, msg, args, l.fieldData, l.fieldCount)
 }
 
+// Format functions
+func (l *Logger) Debugf(format string, args ...any) identifier.ID {
+	return l.inst.logf(DEBUG, format, args, l.fieldData, l.fieldCount)
+}
+func (l *Logger) Infof(format string, args ...any) identifier.ID {
+	return l.inst.logf(INFO, format, args, l.fieldData, l.fieldCount)
+}
+func (l *Logger) Warnf(format string, args ...any) identifier.ID {
+	return l.inst.logf(WARN, format, args, l.fieldData, l.fieldCount)
+}
+func (l *Logger) Errorf(format string, args ...any) identifier.ID {
+	return l.inst.logf(ERR, format, args, l.fieldData, l.fieldCount)
+}
+
 // With implements Instance.
 func (l *Logger) With(args ...any) *Logger {
 	log := l.inst.Logger()

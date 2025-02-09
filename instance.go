@@ -2,6 +2,7 @@ package fluentlog
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -168,6 +169,44 @@ func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffe
 	}
 
 	b.B[x] += appendArgs(b, args)
+
+	inst.queueMessage(b)
+	return
+}
+
+func (inst *Instance) logf(sev Severity, format string, args []any, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
+	if inst.closed() {
+		return
+	}
+
+	b := inst.bufPool.Get()
+	id = identifier.Generate()
+
+	b.B = msgpack.AppendArrayHeader(b.B, 3)
+	b.B = msgpack.AppendString(b.B, inst.opt.Tag)
+	b.B = msgpack.AppendTimestamp(b.B, id.Time(), msgpack.TsFluentd)
+	b.B = append(b.B, 0xde, 0, 0) // map 16
+
+	x := len(b.B) - 1
+
+	b.B[x]++
+	b.B = msgpack.AppendString(b.B, "@id")
+	b.B = msgpack.AppendInt(b.B, id.Int64())
+
+	b.B[x]++
+	b.B = msgpack.AppendString(b.B, "@pri")
+	b.B = msgpack.AppendUint(b.B, uint64(sev))
+
+	b.B[x]++
+	b.B = msgpack.AppendString(b.B, "message")
+	b.B = msgpack.AppendStringDynamic(b.B, func(dst []byte) []byte {
+		return fmt.Appendf(dst, format, args...)
+	})
+
+	if extraCount > 0 {
+		b.B = append(b.B, extraData.B...)
+		b.B[x] += extraCount
+	}
 
 	inst.queueMessage(b)
 	return

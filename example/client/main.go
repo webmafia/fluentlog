@@ -56,11 +56,12 @@ func startClient(ctx context.Context) (err error) {
 	// cli.Connect(ctx)
 
 	for i := range 10 {
-		sub.Info("hello world",
-			"count", i+1,
-			"foo", "bar",
-			fluentlog.StackTrace(),
-		)
+		sub.Infof("hello %d", i+1)
+		// sub.Info("hello world",
+		// 	"count", i+1,
+		// 	"foo", "bar",
+		// 	fluentlog.StackTrace(),
+		// )
 	}
 
 	// if err = cli.Connect(ctx); err != nil {

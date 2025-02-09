@@ -107,3 +107,99 @@ func TestAppendStringUnknownLength(t *testing.T) {
 		t.Errorf("expected %v, got %v", expect, result)
 	}
 }
+
+// AppendStringDynamic verifies that AppendStringDynamic produces
+// the minimal header for a given string and that the encoded data matches.
+func TestAppendStringDynamic(t *testing.T) {
+	// Each test case provides an input string and the expected header bytes.
+	tests := []struct {
+		name   string
+		input  string
+		header []byte // Expected header prefix.
+	}{
+		{
+			name:   "fixstr short",
+			input:  "hello", // length = 5
+			header: []byte{0xa0 | 5},
+		},
+		{
+			name:   "fixstr max",
+			input:  string(make([]byte, 31)), // length = 31
+			header: []byte{0xa0 | 31},
+		},
+		{
+			name:   "str8",
+			input:  string(make([]byte, 32)), // length = 32 -> needs str8
+			header: []byte{0xd9, 32},
+		},
+		{
+			name:   "str8 upper",
+			input:  string(make([]byte, 255)), // length = 255 -> still str8
+			header: []byte{0xd9, 255},
+		},
+		{
+			name:   "str16",
+			input:  string(make([]byte, 256)), // length = 256 -> needs str16
+			header: []byte{0xda, 1, 0},        // 256 = 0x0100
+		},
+		{
+			name:   "str16 max",
+			input:  string(make([]byte, 65535)), // length = 65535 -> str16
+			header: []byte{0xda, 0xff, 0xff},
+		},
+		{
+			name:   "str32",
+			input:  string(make([]byte, 65536)), // length = 65536 -> requires str32
+			header: []byte{0xdb, 0, 1, 0, 0},    // 65536 = 0x00010000
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dst := []byte{}
+			s := tc.input
+			// fn appends s to the destination.
+			fn := func(dst []byte) []byte {
+				return append(dst, s...)
+			}
+			encoded := AppendStringDynamic(dst, fn)
+			l := len(s)
+			headerLen := len(tc.header)
+
+			// Check that the header is correct.
+			if len(encoded) < headerLen {
+				t.Fatalf("encoded length %d is less than expected header length %d", len(encoded), headerLen)
+			}
+			for i := 0; i < headerLen; i++ {
+				if encoded[i] != tc.header[i] {
+					t.Errorf("header byte %d: got 0x%x, expected 0x%x", i, encoded[i], tc.header[i])
+				}
+			}
+
+			// Check that the string data follows immediately after the header.
+			data := encoded[headerLen:]
+			if string(data) != s {
+				t.Errorf("data mismatch: got %q, expected %q", string(data), s)
+			}
+
+			// Verify the overall length is header length + string length.
+			if len(encoded) != headerLen+l {
+				t.Errorf("unexpected encoded length: got %d, expected %d", len(encoded), headerLen+l)
+			}
+		})
+	}
+}
+
+// BenchmarkAppendStringDynamic benchmarks the performance of AppendStringDynamic.
+func BenchmarkAppendStringDynamic(b *testing.B) {
+	// We'll use a 100-byte string for this benchmark.
+	s := string(make([]byte, 100))
+	fn := func(dst []byte) []byte {
+		return append(dst, s...)
+	}
+	var buf []byte
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf = AppendStringDynamic(buf[:0], fn)
+	}
+}
