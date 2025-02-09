@@ -2,6 +2,7 @@ package msgpack
 
 import (
 	"io"
+	"log"
 	"time"
 
 	"github.com/webmafia/fast/buffer"
@@ -105,6 +106,7 @@ func (w Writer) WriteCustom(fn func([]byte) []byte) {
 }
 
 func (w Writer) WriteBinaryReader(size int, r io.Reader) (err error) {
+	log.Println("writing", size, "bytes binary")
 	w.b.B = appendBinaryHeader(w.b.B, size)
 
 	if err = w.Flush(); err != nil {

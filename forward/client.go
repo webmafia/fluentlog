@@ -120,5 +120,5 @@ func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
 	c.w.WriteString("compressed")
 	c.w.WriteString("gzip")
 
-	return
+	return c.w.Flush()
 }

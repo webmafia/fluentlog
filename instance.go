@@ -55,11 +55,12 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 		cli:   cli,
 		opt:   opt,
 		queue: make(chan *buffer.Buffer, opt.BufferSize),
+		close: make(chan struct{}),
 	}
 
 	if inst.opt.WriteBehavior == Fallback {
 		if inst.opt.Fallback == nil {
-			return nil, errors.New("WriteBehavior set to 'Fallback', but not Fallblack provided")
+			return nil, errors.New("WriteBehavior set to 'Fallback', but no Fallblack provided")
 		}
 
 		if _, ok := inst.cli.(BatchWriter); !ok {
@@ -71,6 +72,16 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 
 		inst.wg.Add(1)
 		go inst.fallbackWorker()
+
+		ok, err := inst.opt.Fallback.AnythingToRead()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if ok {
+			inst.fbNonEmpty <- struct{}{}
+		}
 	}
 
 	inst.wg.Add(1)
@@ -98,13 +109,21 @@ func (inst *Instance) Release(l *Logger) {
 	inst.logPool.Put(l)
 }
 
-func (inst *Instance) Close() {
+func (inst *Instance) Close() (err error) {
 	close(inst.close)
 	inst.wg.Wait()
 
-	if closer, ok := inst.cli.(io.WriteCloser); ok {
-		closer.Close()
+	if inst.opt.Fallback != nil {
+		if err = inst.opt.Fallback.Close(); err != nil {
+			return
+		}
 	}
+
+	if closer, ok := inst.cli.(io.WriteCloser); ok {
+		err = closer.Close()
+	}
+
+	return
 }
 
 func (inst *Instance) closed() bool {
@@ -179,73 +198,95 @@ func (inst *Instance) worker() {
 	defer inst.wg.Done()
 
 	for {
+		// First, try a non-blocking receive from the main queue.
 		select {
-
 		case b := <-inst.queue:
-			if err := inst.write(b.B); err != nil {
+			inst.sendToCli(b)
+			continue
+		default:
+			// Nothing immediately available on the main queue.
+		}
+
+		// Now block waiting for a log message, a fallback signal, or a shutdown.
+		select {
+		case b := <-inst.queue:
+			inst.sendToCli(b)
+
+		case <-inst.fbNonEmpty:
+			log.Println("sending batch")
+			err := inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
+				return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
+			})
+
+			if err != nil {
 				log.Println(err)
 			}
 
-			inst.bufPool.Put(b)
-
 		case <-inst.close:
+			// Shutdown has been signaled.
+			// Drain any remaining messages on the main queue.
 			for {
 				select {
-
 				case b := <-inst.queue:
-					if err := inst.write(b.B); err != nil {
-						log.Println(err)
-					}
-
-					inst.bufPool.Put(b)
-
+					inst.sendToCli(b)
 				default:
+					// No more messages; exit the worker.
 					return
-
 				}
-			}
-
-		default:
-			select {
-			case b := <-inst.queue:
-				if err := inst.write(b.B); err != nil {
-					log.Println(err)
-				}
-
-				inst.bufPool.Put(b)
-
-			case <-inst.close:
-				for {
-					select {
-
-					case b := <-inst.queue:
-						if err := inst.write(b.B); err != nil {
-							log.Println(err)
-						}
-
-						inst.bufPool.Put(b)
-
-					default:
-						return
-
-					}
-				}
-
-			case <-inst.fbNonEmpty:
-				// TODO: Send disk-buffer as a batch to client
 			}
 		}
 	}
 }
 
+func (inst *Instance) sendToCli(b *buffer.Buffer) {
+	log.Println("received msg to main")
+	if _, err := inst.cli.Write(fast.NoescapeBytes(b.B)); err != nil {
+		log.Println(err)
+	}
+
+	inst.bufPool.Put(b)
+}
+
 func (inst *Instance) fallbackWorker() {
 	defer inst.wg.Done()
 
-	for b := range inst.fbQueue {
+	for {
+		select {
+		case b := <-inst.fbQueue:
+			inst.sendToFallbackCli(b)
+		case <-inst.close:
+			// Shutdown has been signaled.
+			// Drain any remaining messages on the fallback queue.
+			for {
+				select {
+				case b := <-inst.queue:
+					inst.sendToFallbackCli(b)
+				default:
+					// No more messages; exit the worker.
+					return
+				}
+			}
+		}
 
-		inst.bufPool.Put(b)
+	}
+}
 
-		// Tell that there are messages in the fallback buffer
+func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
+	log.Println("received msg to fallback")
+
+	// When writing to fallback, each entry should only consist of an array of 2 items (timestamp + record).
+	// For this reason, we must strip away the original array header + the tag string, then write an array
+	// header of 2 items + the rest of the entry.
+	strip := 1 + strSize(len(inst.opt.Tag))
+	inst.opt.Fallback.Write([]byte{0x90 | 2})
+	_, err := inst.opt.Fallback.Write(fast.NoescapeBytes(b.B[strip:]))
+
+	inst.bufPool.Put(b)
+
+	// Tell that there are messages in the fallback buffer
+	if err != nil {
+		log.Println(err)
+	} else {
 		select {
 		case inst.fbNonEmpty <- struct{}{}:
 		default:
@@ -253,7 +294,17 @@ func (inst *Instance) fallbackWorker() {
 	}
 }
 
-func (inst *Instance) write(b []byte) (err error) {
-	_, err = inst.cli.Write(fast.NoescapeBytes(b))
-	return
+func strSize(l int) int {
+	switch {
+	case l <= 31:
+		l++
+	case l <= 0xFF:
+		l += 2
+	case l <= 0xFFFF:
+		l += 3
+	default:
+		l += 5
+	}
+
+	return l
 }

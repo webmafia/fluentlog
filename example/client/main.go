@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/webmafia/fluentlog"
+	"github.com/webmafia/fluentlog/fallback"
 	"github.com/webmafia/fluentlog/forward"
 )
 
@@ -20,8 +22,8 @@ func main() {
 }
 
 func startClient(ctx context.Context) (err error) {
-	addr := "localhost:24224"
-	// addr := "localhost:24284"
+	// addr := "localhost:24224"
+	addr := "localhost:24284"
 
 	cli := forward.NewClient(addr, forward.ClientOptions{
 		SharedKey: []byte("secret"),
@@ -32,7 +34,16 @@ func startClient(ctx context.Context) (err error) {
 	// f := filebuf.NewFileBuffer("log-buffer.bin")
 	// defer f.Close()
 
-	inst := fluentlog.NewInstance(cli)
+	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
+		WriteBehavior: fluentlog.Fallback,
+		Fallback:      fallback.NewDirBuffer("fallback"),
+		BufferSize:    4,
+	})
+
+	if err != nil {
+		return
+	}
+
 	defer inst.Close()
 
 	l := fluentlog.NewLogger(inst)
@@ -57,7 +68,7 @@ func startClient(ctx context.Context) (err error) {
 	// 	return
 	// }
 
-	// time.Sleep(3 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	// msg := fluentlog.NewMessage("foo.bar", time.Now())
 	// msg.AddField("foo", 123)

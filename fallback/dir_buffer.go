@@ -104,7 +104,7 @@ func (f *DirBuffer) closeWriteFile() (err error) {
 }
 
 func (d *DirBuffer) initDir() (err error) {
-	return os.MkdirAll(d.dir, perm)
+	return os.MkdirAll(d.dir, 0700)
 }
 
 // Write implements io.WriteCloser.
@@ -199,6 +199,7 @@ func (d *DirBuffer) Reader(fn func(n int, r io.Reader) error) (err error) {
 		return
 	}
 
+	// return nil
 	return d.read.Truncate(0)
 }
 
