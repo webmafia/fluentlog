@@ -155,11 +155,6 @@ func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffe
 }
 
 func (inst *Instance) queueMessage(b *buffer.Buffer) {
-	if inst.opt.WriteBehavior == Block {
-		inst.queue <- b
-		return
-	}
-
 	select {
 
 	// Try to put message in queue
@@ -167,14 +162,19 @@ func (inst *Instance) queueMessage(b *buffer.Buffer) {
 
 	// If the queue is full
 	default:
-		if inst.opt.WriteBehavior == Fallback {
+		switch inst.opt.WriteBehavior {
+		case Block:
+			inst.queue <- b
+		case Fallback:
 			inst.fbQueue <- b
-		} else {
+		default:
 			inst.bufPool.Put(b)
 		}
 	}
 }
 
+// The worker prioritizes any pending log messages in queue. If it's empty,
+// it's checks for any fallback buffer and handles it.
 func (inst *Instance) worker() {
 	defer inst.wg.Done()
 
@@ -203,6 +203,36 @@ func (inst *Instance) worker() {
 					return
 
 				}
+			}
+
+		default:
+			select {
+			case b := <-inst.queue:
+				if err := inst.write(b.B); err != nil {
+					log.Println(err)
+				}
+
+				inst.bufPool.Put(b)
+
+			case <-inst.close:
+				for {
+					select {
+
+					case b := <-inst.queue:
+						if err := inst.write(b.B); err != nil {
+							log.Println(err)
+						}
+
+						inst.bufPool.Put(b)
+
+					default:
+						return
+
+					}
+				}
+
+			case <-inst.fbNonEmpty:
+				// TODO: Send disk-buffer as a batch to client
 			}
 		}
 	}
