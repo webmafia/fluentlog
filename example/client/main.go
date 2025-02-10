@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/webmafia/fluentlog"
 	"github.com/webmafia/fluentlog/fallback"
@@ -34,9 +35,10 @@ func startClient(ctx context.Context) (err error) {
 	// defer f.Close()
 
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
-		WriteBehavior: fluentlog.Fallback,
-		Fallback:      fallback.NewDirBuffer("fallback"),
-		BufferSize:    4,
+		WriteBehavior:       fluentlog.Fallback,
+		Fallback:            fallback.NewDirBuffer("fallback"),
+		BufferSize:          4,
+		StackTraceThreshold: fluentlog.NOTICE,
 	})
 
 	if err != nil {
@@ -53,10 +55,21 @@ func startClient(ctx context.Context) (err error) {
 
 	defer sub.Release()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer sub.Recover()
+
+		panic("aaaaaahh")
+	}()
+
+	wg.Wait()
+
 	// cli.Connect(ctx)
 
 	for i := range 10 {
-		sub.Infof("hello %d", i+1)
+		sub.Infof("hello %d C", i+1)
 		// sub.Info("hello world",
 		// 	"count", i+1,
 		// 	"foo", "bar",
@@ -68,7 +81,7 @@ func startClient(ctx context.Context) (err error) {
 	// 	return
 	// }
 
-	// time.Sleep(3 * time.Second)
+	// time.Sleep(time.Second)
 
 	// msg := fluentlog.NewMessage("foo.bar", time.Now())
 	// msg.AddField("foo", 123)

@@ -318,7 +318,7 @@ func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) 
 	tag := s.tag.String()
 	log.Println(tag, ts)
 
-	log.Println("receivec entry of", numFields, "fields")
+	log.Println("received entry of", numFields, "fields")
 
 	for range numFields {
 		if !iter.Next() {

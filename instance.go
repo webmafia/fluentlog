@@ -27,10 +27,11 @@ type Instance struct {
 }
 
 type Options struct {
-	Tag           string
-	BufferSize    int
-	WriteBehavior WriteBehavior
-	Fallback      *fallback.DirBuffer
+	Tag                 string
+	BufferSize          int
+	WriteBehavior       WriteBehavior
+	Fallback            *fallback.DirBuffer
+	StackTraceThreshold Severity
 }
 
 func (opt *Options) setDefaults() {
@@ -43,6 +44,7 @@ func (opt *Options) setDefaults() {
 	}
 }
 
+// Create a logger instance used for acquiring loggers.
 func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 	var opt Options
 
@@ -91,6 +93,7 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 	return inst, nil
 }
 
+// Acquires a new, empty logger.
 func (inst *Instance) Logger() *Logger {
 	l, ok := inst.logPool.Get().(*Logger)
 
@@ -103,6 +106,7 @@ func (inst *Instance) Logger() *Logger {
 	return l
 }
 
+// Releases a logger for reuse.
 func (inst *Instance) Release(l *Logger) {
 	inst.bufPool.Put(l.fieldData)
 	l.fieldData = nil
@@ -110,6 +114,8 @@ func (inst *Instance) Release(l *Logger) {
 	inst.logPool.Put(l)
 }
 
+// Closes the instance. Any new log entries will be ignored, while entries already written
+// will be processed. Blocks until fully drained.
 func (inst *Instance) Close() (err error) {
 	close(inst.close)
 	inst.wg.Wait()
@@ -136,7 +142,7 @@ func (inst *Instance) closed() bool {
 	}
 }
 
-func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
+func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, skipStackTrace int, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
 	if inst.closed() {
 		return
 	}
@@ -161,51 +167,27 @@ func (inst *Instance) log(sev Severity, msg string, args []any, extraData *buffe
 
 	b.B[x]++
 	b.B = msgpack.AppendString(b.B, "message")
-	b.B = msgpack.AppendString(b.B, msg)
+	if sprintf {
+		b.B = msgpack.AppendStringDynamic(b.B, func(dst []byte) []byte {
+			return fmt.Appendf(dst, msg, args...)
+		})
+	} else {
+		b.B = msgpack.AppendString(b.B, msg)
+	}
 
 	if extraCount > 0 {
 		b.B = append(b.B, extraData.B...)
 		b.B[x] += extraCount
 	}
 
-	b.B[x] += appendArgs(b, args)
-
-	inst.queueMessage(b)
-	return
-}
-
-func (inst *Instance) logf(sev Severity, format string, args []any, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
-	if inst.closed() {
-		return
+	if !sprintf {
+		b.B[x] += appendArgs(b, args)
 	}
 
-	b := inst.bufPool.Get()
-	id = identifier.Generate()
-
-	b.B = msgpack.AppendArrayHeader(b.B, 3)
-	b.B = msgpack.AppendString(b.B, inst.opt.Tag)
-	b.B = msgpack.AppendTimestamp(b.B, id.Time(), msgpack.TsFluentd)
-	b.B = append(b.B, 0xde, 0, 0) // map 16
-
-	x := len(b.B) - 1
-
-	b.B[x]++
-	b.B = msgpack.AppendString(b.B, "@id")
-	b.B = msgpack.AppendInt(b.B, id.Int64())
-
-	b.B[x]++
-	b.B = msgpack.AppendString(b.B, "@pri")
-	b.B = msgpack.AppendUint(b.B, uint64(sev))
-
-	b.B[x]++
-	b.B = msgpack.AppendString(b.B, "message")
-	b.B = msgpack.AppendStringDynamic(b.B, func(dst []byte) []byte {
-		return fmt.Appendf(dst, format, args...)
-	})
-
-	if extraCount > 0 {
-		b.B = append(b.B, extraData.B...)
-		b.B[x] += extraCount
+	if sev <= inst.opt.StackTraceThreshold {
+		var n uint8
+		b.B, n = appendStackTrace(b.B, skipStackTrace)
+		b.B[x] += n
 	}
 
 	inst.queueMessage(b)
@@ -252,7 +234,6 @@ func (inst *Instance) worker() {
 			inst.sendToCli(b)
 
 		case <-inst.fbNonEmpty:
-			log.Println("sending batch")
 			err := inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
 				return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
 			})
@@ -278,7 +259,6 @@ func (inst *Instance) worker() {
 }
 
 func (inst *Instance) sendToCli(b *buffer.Buffer) {
-	log.Println("received msg to main")
 	if _, err := inst.cli.Write(fast.NoescapeBytes(b.B)); err != nil {
 		log.Println("error while writing to cli:", err)
 
@@ -316,7 +296,6 @@ func (inst *Instance) fallbackWorker() {
 }
 
 func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
-	log.Println("received msg to fallback")
 
 	// When writing to fallback, each entry should only consist of an array of 2 items (timestamp + record).
 	// For this reason, we must strip away the original array header + the tag string, then write an array
