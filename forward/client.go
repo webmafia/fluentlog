@@ -12,6 +12,8 @@ import (
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
+var _ io.Writer = (*Client)(nil)
+
 type Client struct {
 	addr           string
 	conn           *net.TCPConn
