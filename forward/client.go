@@ -25,6 +25,7 @@ type Client struct {
 
 type ClientOptions struct {
 	Hostname  string
+	Auth      AuthClient
 	SharedKey []byte
 }
 

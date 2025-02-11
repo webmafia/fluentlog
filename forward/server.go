@@ -22,6 +22,7 @@ type ServerOptions struct {
 	Address   string
 	Hostname  string
 	Tls       *tls.Config // E.g. from golang.org/x/crypto/acme/autocert
+	Auth      AuthServer
 	SharedKey func(clientHostname string) (sharedKey []byte, err error)
 }
 

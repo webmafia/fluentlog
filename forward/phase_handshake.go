@@ -272,3 +272,12 @@ func sharedKeyDigest(salt []byte, fqdn string, nonce []byte, sharedKey []byte) s
 
 	return internal.B2S(hex.AppendEncode(nil, h.Sum(nil)))
 }
+
+func passwordDigest(salt []byte, username, password string) string {
+	h := sha512.New()
+	h.Write(salt)
+	h.Write(internal.S2B(username))
+	h.Write(internal.S2B(password))
+
+	return internal.B2S(hex.AppendEncode(nil, h.Sum(nil)))
+}
