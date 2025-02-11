@@ -1,6 +1,6 @@
-# FluentLog
+# Fluentlog
 
-**FluentLog** is a high-performance, asynchronous logging library for Go that implements the Fluent Forward protocol (used by [FluentBit](https://fluentbit.io/) and [Fluentd](https://www.fluentd.org/), hence the name). It is designed for minimal overhead and maximum flexibility, with zero allocations during logging operations.
+**Fluentlog** is a high-performance, asynchronous logging library for Go that implements the Fluent Forward protocol (used by [FluentBit](https://fluentbit.io/) and [Fluentd](https://www.fluentd.org/), hence the name). It is designed for minimal overhead and maximum flexibility, with zero allocations during logging operations.
 
 > **Note:** While this package integrates with the awesome work of the Fluentd team, this is **not** an official package of theirs.
 
@@ -36,7 +36,7 @@
 
 ## Installation
 
-Install FluentLog and its dependencies using `go get`:
+Install Fluentlog and its dependencies using `go get`:
 
 ```sh
 go get github.com/webmafia/fluentlog
@@ -46,7 +46,7 @@ When choosing between FluentBit and Fluentd, always pick the lighter FluentBit u
 
 ## Getting Started
 
-Below is an example demonstrating how to set up a FluentLog instance, create a logger, use sub-loggers with metadata, and log messages with different severity levels.
+Below is an example demonstrating how to set up a Fluentlog instance, create a logger, use sub-loggers with metadata, and log messages with different severity levels.
 
 ```go
 package main
@@ -82,7 +82,7 @@ func startClient(ctx context.Context) error {
 		SharedKey: []byte("secret"),
 	})
 
-	// Create a new FluentLog instance with desired options.
+	// Create a new Fluentlog instance with desired options.
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 		WriteBehavior:       fluentlog.Fallback,               // Use fallback when the log queue is full.
 		Fallback:            fallback.NewDirBuffer("logbuf"),   // Disk-based fallback buffer using "logbuf" directory.
@@ -115,7 +115,7 @@ func startClient(ctx context.Context) error {
 
 ## Structured Logging
 
-FluentLog supports structured logging by allowing you to pass key-value pairs as arguments to log messages and sub-loggers. The logging methods accept an initial message (or format) string followed by a variadic list of arguments. These arguments must be provided in pairs:
+Fluentlog supports structured logging by allowing you to pass key-value pairs as arguments to log messages and sub-loggers. The logging methods accept an initial message (or format) string followed by a variadic list of arguments. These arguments must be provided in pairs:
 
 - **Odd-indexed arguments:** Keys (must be strings according to the Fluent Forward protocol)
 - **Even-indexed arguments:** Corresponding values
@@ -224,7 +224,7 @@ go func() {
 
 ## Write Behavior Modes
 
-FluentLog supports three write behavior modes via the `Options.WriteBehavior` setting:
+Fluentlog supports three write behavior modes via the `Options.WriteBehavior` setting:
 
 - **Block:**  
   If the log queue is full, the log call will block until space becomes available. This ensures that no messages are lost but may cause delays.
@@ -246,7 +246,7 @@ inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 
 ## Fallback Buffer
 
-When using the fallback write behavior, FluentLog uses a disk-based fallback mechanism (e.g., `DirBuffer`) to temporarily store log messages. Key points include:
+When using the fallback write behavior, Fluentlog uses a disk-based fallback mechanism (e.g., `DirBuffer`) to temporarily store log messages. Key points include:
 
 - **Fallback Queue:**  
   An unbuffered channel to queue messages when the main queue is full.
@@ -264,4 +264,4 @@ Contributions are welcome, but please open an issue first that describes your us
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-By following the guidelines and examples above, you can integrate FluentLog into your application, take advantage of its zero-allocation logging operations, and ensure reliable logging using the Fluent Forward protocol. Happy coding!
+By following the guidelines and examples above, you can integrate Fluentlog into your application, take advantage of its zero-allocation logging operations, and ensure reliable logging using the Fluent Forward protocol. Happy coding!
