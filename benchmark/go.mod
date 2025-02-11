@@ -2,9 +2,6 @@ module github.com/webmafia/fluentlog/benchmark
 
 go 1.23.5
 
-replace github.com/webmafia/fluentlog => ../
-replace github.com/webmafia/fast => ../../go-fast
-
 require (
 	github.com/webmafia/fluentlog v0.0.0
 	go.uber.org/zap v1.27.0
