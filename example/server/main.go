@@ -5,9 +5,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
-	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/forward"
+	"github.com/webmafia/fluentlog/internal/msgpack"
 )
 
 func main() {
@@ -26,19 +27,26 @@ func startServer(ctx context.Context) (err error) {
 		SharedKey: forward.SharedKey([]byte("secret")),
 	})
 
-	return serv.Listen(ctx, func(b *buffer.Buffer) error {
-		log.Println(b.String())
-		log.Println(b.Bytes())
+	return serv.Listen(ctx, func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error {
+		log.Println(tag, ts)
+		log.Println("received entry of", numFields, "fields")
 
-		// msg := fluentlog.MsgFromBuf(b.B)
-		// log.Println(msg.Tag(), msg.Time())
+		for range numFields {
+			if !iter.Next() {
+				return iter.Error()
+			}
 
-		// for k, v := range msg.Fields().Map() {
-		// 	log.Println(k.String(), v.String())
-		// }
+			key := iter.Any()
+
+			if !iter.Next() {
+				return iter.Error()
+			}
+
+			val := iter.Any()
+
+			log.Println("  ", key, "=", val)
+		}
 
 		return nil
 	})
-
-	return
 }

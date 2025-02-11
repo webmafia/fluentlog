@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"time"
 
@@ -71,9 +70,6 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 	if err = c.readPong(nonce, salt); err != nil {
 		return
 	}
-
-	log.Println("connected!")
-	// c.r.Release(true)
 
 	return
 }

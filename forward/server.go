@@ -44,7 +44,7 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err error) {
+func (s *Server) Listen(ctx context.Context, handler Handler) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -92,14 +92,15 @@ func (s *Server) Listen(ctx context.Context, fn func(*buffer.Buffer) error) (err
 			defer s.bufPool.Put(tag)
 
 			sc := ServerConn{
-				serv: s,
-				conn: conn,
-				r:    iter,
-				w:    msgpack.NewWriter(conn, wBuf),
-				tag:  tag,
+				serv:    s,
+				conn:    conn,
+				r:       iter,
+				w:       msgpack.NewWriter(conn, wBuf),
+				tag:     tag,
+				handler: handler,
 			}
 
-			if err := sc.Handle(fn); err != nil {
+			if err := sc.Handle(); err != nil {
 				log.Println(err)
 			}
 

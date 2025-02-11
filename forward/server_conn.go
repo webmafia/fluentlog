@@ -15,12 +15,15 @@ import (
 )
 
 type ServerConn struct {
-	serv *Server
-	conn net.Conn
-	r    *msgpack.Iterator
-	w    msgpack.Writer
-	tag  *buffer.Buffer
+	serv    *Server
+	conn    net.Conn
+	r       *msgpack.Iterator
+	w       msgpack.Writer
+	tag     *buffer.Buffer
+	handler Handler
 }
+
+type Handler func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error
 
 func (s *ServerConn) String() string {
 	_, port, _ := strings.Cut(s.conn.RemoteAddr().String(), ":")
@@ -31,7 +34,7 @@ func (s *ServerConn) log(str string, args ...any) {
 	log.Println("client", s.String(), "|", fmt.Sprintf(str, args...))
 }
 
-func (s *ServerConn) Handle(fn func(*buffer.Buffer) error) (err error) {
+func (s *ServerConn) Handle() (err error) {
 	defer s.conn.Close()
 
 	s.log("connected")
@@ -315,31 +318,7 @@ func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
 }
 
 func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
-	tag := s.tag.String()
-	log.Println(tag, ts)
-
-	log.Println("received entry of", numFields, "fields")
-
-	for range numFields {
-		if !iter.Next() {
-			return iter.Error()
-		}
-
-		key := iter.Any()
-
-		if !iter.Next() {
-			return iter.Error()
-		}
-
-		val := iter.Any()
-
-		log.Println("  ", key, "=", val)
-	}
-
-	// for k, v := range rec.Map() {
-	// 	log.Println("  ", k, "=", v)
-	// }
-	return
+	return s.handler(s.tag.String(), ts, iter, numFields)
 }
 
 // Iterate options to find "chunk" value, and send ack back to client.
