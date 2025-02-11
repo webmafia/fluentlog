@@ -36,7 +36,7 @@ func startClient(ctx context.Context) (err error) {
 
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 		WriteBehavior:       fluentlog.Fallback,
-		Fallback:            fallback.NewDirBuffer("fallback"),
+		Fallback:            fallback.NewDirBuffer("fluentlog"),
 		BufferSize:          4,
 		StackTraceThreshold: fluentlog.NOTICE,
 	})

@@ -85,7 +85,7 @@ func startClient(ctx context.Context) error {
 	// Create a new Fluentlog instance with desired options.
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 		WriteBehavior:       fluentlog.Fallback,               // Use fallback when the log queue is full.
-		Fallback:            fallback.NewDirBuffer("logbuf"),   // Disk-based fallback buffer using "logbuf" directory.
+		Fallback:            fallback.NewDirBuffer("fluentlog"),   // Disk-based fallback buffer using "fluentlog" directory.
 		StackTraceThreshold: fluentlog.NOTICE,                 // Threshold for including a stack trace.
 	})
 	if err != nil {
@@ -155,7 +155,7 @@ The logging system is built around the `Instance` type. Create a new instance us
 ```go
 inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
     WriteBehavior:       fluentlog.Fallback,  // Choose Block, Loose, or Fallback.
-    Fallback:            fallback.NewDirBuffer("logbuf"),
+    Fallback:            fallback.NewDirBuffer("fluentlog"),
     BufferSize:          16,                  // Default is 16 if not specified.
     StackTraceThreshold: fluentlog.NOTICE,
 })
@@ -240,7 +240,7 @@ Set the mode when creating the logger instance:
 ```go
 inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
     WriteBehavior: fluentlog.Fallback,
-    Fallback:      fallback.NewDirBuffer("logbuf"),
+    Fallback:      fallback.NewDirBuffer("fluentlog"),
 })
 ```
 
