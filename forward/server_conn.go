@@ -24,6 +24,7 @@ type ServerConn struct {
 	w       msgpack.Writer
 	tag     *buffer.Buffer
 	handler Handler
+	entries int
 }
 
 type Handler func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error
@@ -331,6 +332,7 @@ func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
 }
 
 func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
+	s.entries++
 	return s.handler(s.tag.String(), ts, iter, numFields)
 }
 

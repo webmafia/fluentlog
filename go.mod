@@ -6,6 +6,6 @@ go 1.23
 
 require (
 	github.com/klauspost/compress v1.17.11
-	github.com/webmafia/fast v0.13.0
+	github.com/webmafia/fast v0.14.0
 	github.com/webmafia/identifier v0.2.0
 )

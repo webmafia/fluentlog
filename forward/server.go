@@ -105,6 +105,7 @@ func (s *Server) Listen(ctx context.Context, handler Handler) (err error) {
 				log.Println(err)
 			}
 
+			sc.log("received %d entries (totally %d bytes, or ~%d b/entry)", sc.entries, sc.r.TotalRead(), sc.r.TotalRead()/sc.entries)
 			sc.log("disconnected")
 		}()
 	}

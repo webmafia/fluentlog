@@ -15,7 +15,6 @@ import (
 type Iterator struct {
 	r      *bufio.Reader
 	err    error
-	tot    int        // Total read bytes
 	n      int        // Cursor position
 	length int        // Token value length
 	items  int        // Number of array/map items
@@ -53,7 +52,6 @@ func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
 
 func (iter *Iterator) reset() {
 	iter.n = 0
-	iter.tot = 0
 }
 
 // Read next token. Must be called before any Read* method.
@@ -218,8 +216,8 @@ func (iter *Iterator) Skip() {
 }
 
 // Get total bytes read
-func (r *Iterator) Total() int {
-	return r.tot
+func (r *Iterator) TotalRead() int {
+	return r.r.TotalRead()
 }
 
 // Sets the release point as current position. Anything before this will be kept after release.
