@@ -23,10 +23,6 @@ func expectedType(c byte, expected types.Type) (err error) {
 	return fmt.Errorf("%w: expected %s, got 0x%02x", ErrInvalidHeaderByte, expected, c)
 }
 
-func expectedTypes(c byte, expected ...types.Type) (err error) {
-	return fmt.Errorf("%w: expected any of %v, got 0x%02x", ErrInvalidHeaderByte, expected, c)
-}
-
 func expectedExtType(got, expected byte) (err error) {
 	return fmt.Errorf("%w: expected 0x%02x, got 0x%02x", ErrInvalidExtByte, expected, got)
 }

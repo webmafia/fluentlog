@@ -2,7 +2,6 @@ package msgpack
 
 import (
 	"encoding/binary"
-	"io"
 	"math"
 )
 
@@ -89,31 +88,4 @@ func roundPow(n int) int {
 
 	// Add one to get the next power of 2
 	return n + 1
-}
-
-func skipBytes(r io.Reader, n int) error {
-	if seeker, ok := r.(io.Seeker); ok {
-		_, err := seeker.Seek(int64(n), io.SeekCurrent)
-		return err
-	}
-
-	// Fallback if io.Reader does not implement io.Seeker
-	var buf [4096]byte // Fixed-size array for skipping
-	for n > 0 {
-		toRead := len(buf)
-		if n < toRead {
-			toRead = n
-		}
-
-		read, err := r.Read(buf[:toRead])
-		if err != nil {
-			return err
-		}
-
-		n -= read
-		if read == 0 {
-			return io.ErrUnexpectedEOF
-		}
-	}
-	return nil
 }
