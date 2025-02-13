@@ -23,6 +23,7 @@ type Instance struct {
 	fbQueue    chan *buffer.Buffer // Fallback queue (unbuffered)
 	fbNonEmpty chan struct{}       // Whether fbQueue is non-empty (exactly 1 in buffer size)
 	close      chan struct{}       // Close channel
+	done       chan struct{}       // Done channel
 	wg         sync.WaitGroup
 }
 
@@ -59,6 +60,7 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 		opt:   opt,
 		queue: make(chan *buffer.Buffer, opt.BufferSize),
 		close: make(chan struct{}),
+		done:  make(chan struct{}),
 	}
 
 	if inst.opt.WriteBehavior == Fallback {
@@ -216,7 +218,10 @@ func (inst *Instance) queueMessage(b *buffer.Buffer) {
 // The worker prioritizes any pending log messages in queue. If it's empty,
 // it's checks for any fallback buffer and handles it.
 func (inst *Instance) worker() {
-	defer inst.wg.Done()
+	defer func() {
+		close(inst.done)
+		inst.wg.Done()
+	}()
 
 	for {
 		// First, try a non-blocking receive from the main queue.
@@ -278,12 +283,12 @@ func (inst *Instance) fallbackWorker() {
 		select {
 		case b := <-inst.fbQueue:
 			inst.sendToFallbackCli(b)
-		case <-inst.close:
+		case <-inst.done:
 			// Shutdown has been signaled.
 			// Drain any remaining messages on the fallback queue.
 			for {
 				select {
-				case b := <-inst.queue:
+				case b := <-inst.fbQueue:
 					inst.sendToFallbackCli(b)
 				default:
 					// No more messages; exit the worker.

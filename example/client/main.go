@@ -27,6 +27,8 @@ func startClient(ctx context.Context) (err error) {
 
 	cli := forward.NewClient(addr, forward.ClientOptions{
 		Auth: forward.StaticAuthClient(forward.Credentials{
+			Username:  "foo",
+			Password:  "bar",
 			SharedKey: "secret",
 		}),
 	})
