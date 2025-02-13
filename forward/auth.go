@@ -6,22 +6,28 @@ import (
 )
 
 type (
-	AuthClient func(ctx context.Context) (username, password string)
-	AuthServer func(ctx context.Context, username string) (password string, err error)
+	Credentials struct {
+		Username  string
+		Password  string
+		SharedKey string
+	}
+
+	AuthClient func(ctx context.Context) (Credentials, error)
+	AuthServer func(ctx context.Context, username string) (Credentials, error)
 )
 
-func StaticAuthClient(username, password string) AuthClient {
-	return func(_ context.Context) (username string, password string) {
-		return username, password
+func StaticAuthClient(cred Credentials) AuthClient {
+	return func(_ context.Context) (Credentials, error) {
+		return cred, nil
 	}
 }
 
-func StaticAuthServer(username, password string) AuthServer {
-	return func(_ context.Context, user string) (string, error) {
-		if user == username {
-			return password, nil
+func StaticAuthServer(cred Credentials) AuthServer {
+	return func(_ context.Context, username string) (Credentials, error) {
+		if username == cred.Username {
+			return cred, nil
 		}
 
-		return "", fmt.Errorf("username '%s' no found", user)
+		return Credentials{}, fmt.Errorf("unknown username '%s'", username)
 	}
 }

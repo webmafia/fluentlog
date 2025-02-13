@@ -65,6 +65,12 @@ func (w Writer) WriteString(s string) {
 	w.b.B = AppendString(w.b.B, s)
 }
 
+// WriteStringMax255 appends a string of unknown length (but
+// max 255 characters) to the buffer.
+func (w Writer) WriteStringMax255(fn func(dst []byte) []byte) {
+	w.b.B = AppendStringMax255(w.b.B, fn)
+}
+
 // WriteInt appends an integer to the buffer.
 func (w Writer) WriteInt(i int64) {
 	w.b.B = AppendInt(w.b.B, i)

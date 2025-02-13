@@ -1,6 +1,8 @@
 package forward
 
 import (
+	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fast/bufio"
 	"github.com/webmafia/fluentlog/internal/msgpack"
@@ -34,12 +37,12 @@ func (s *ServerConn) log(str string, args ...any) {
 	log.Println("client", s.String(), "|", fmt.Sprintf(str, args...))
 }
 
-func (s *ServerConn) Handle() (err error) {
+func (s *ServerConn) Handle(ctx context.Context) (err error) {
 	defer s.conn.Close()
 
 	s.log("connected")
 
-	if err = s.handshakePhase(); err != nil {
+	if err = s.handshakePhase(ctx); err != nil {
 		return
 	}
 
@@ -50,23 +53,33 @@ func (s *ServerConn) Handle() (err error) {
 	return
 }
 
-func (s *ServerConn) handshakePhase() (err error) {
+func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 	s.log("initializing handshake phase...")
 
-	nonce, err := s.writeHelo()
+	var nonceAuth [48]byte
 
-	if err != nil {
+	if _, err = rand.Read(nonceAuth[:]); err != nil {
 		return
 	}
 
-	salt, sharedKey, err := s.readPing(nonce[:])
+	nonce, auth := fast.BytesToString(nonceAuth[:24]), fast.BytesToString(nonceAuth[24:])
 
-	if err != nil {
-		s.writePong(nonce[:], salt, sharedKey, false, err.Error())
+	if !s.serv.opt.PasswordAuth {
+		auth = ""
+	}
+
+	if err = s.writeHelo(nonce, auth); err != nil {
 		return
 	}
 
-	if err = s.writePong(nonce[:], salt, sharedKey, true, ""); err != nil {
+	salt, cred, err := s.readPing(ctx, nonce, auth)
+
+	if err != nil {
+		s.writePong(nonce, salt, "", false, err.Error())
+		return
+	}
+
+	if err = s.writePong(salt, nonce, cred.SharedKey, true, ""); err != nil {
 		return
 	}
 

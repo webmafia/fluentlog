@@ -23,8 +23,10 @@ func main() {
 func startServer(ctx context.Context) (err error) {
 	serv := forward.NewServer(forward.ServerOptions{
 		// Address: "localhost:24224",
-		Address:   "localhost:24284",
-		SharedKey: forward.SharedKey([]byte("secret")),
+		Address: "localhost:24284",
+		Auth: forward.StaticAuthServer(forward.Credentials{
+			SharedKey: "secret",
+		}),
 	})
 
 	return serv.Listen(ctx, func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error {

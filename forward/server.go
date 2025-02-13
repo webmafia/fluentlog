@@ -19,11 +19,11 @@ type Server struct {
 }
 
 type ServerOptions struct {
-	Address   string
-	Hostname  string
-	Tls       *tls.Config // E.g. from golang.org/x/crypto/acme/autocert
-	Auth      AuthServer
-	SharedKey func(clientHostname string) (sharedKey []byte, err error)
+	Address      string
+	Hostname     string
+	Tls          *tls.Config // E.g. from golang.org/x/crypto/acme/autocert
+	Auth         AuthServer
+	PasswordAuth bool
 }
 
 func SharedKey(sharedKey []byte) func(clientHostname string) (sharedKey []byte, err error) {
@@ -33,8 +33,8 @@ func SharedKey(sharedKey []byte) func(clientHostname string) (sharedKey []byte, 
 }
 
 func NewServer(opt ServerOptions) *Server {
-	if opt.SharedKey == nil {
-		opt.SharedKey = func(clientHostname string) (sharedKey []byte, err error) { return nil, nil }
+	if opt.Auth == nil {
+		opt.Auth = func(ctx context.Context, username string) (cred Credentials, err error) { return }
 	}
 
 	return &Server{
@@ -101,7 +101,7 @@ func (s *Server) Listen(ctx context.Context, handler Handler) (err error) {
 				handler: handler,
 			}
 
-			if err := sc.Handle(); err != nil {
+			if err := sc.Handle(ctx); err != nil {
 				log.Println(err)
 			}
 

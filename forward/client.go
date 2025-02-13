@@ -2,11 +2,13 @@ package forward
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"net"
 	"time"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/msgpack"
 )
@@ -24,9 +26,8 @@ type Client struct {
 }
 
 type ClientOptions struct {
-	Hostname  string
-	Auth      AuthClient
-	SharedKey []byte
+	Hostname string
+	Auth     AuthClient
 }
 
 func NewClient(addr string, opt ClientOptions) *Client {
@@ -42,6 +43,7 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 	var (
 		dial net.Dialer
 		conn net.Conn
+		cred Credentials
 		ok   bool
 	)
 
@@ -53,22 +55,30 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 		return ErrFailedConn
 	}
 
+	if cred, err = c.opt.Auth(ctx); err != nil {
+		return
+	}
+
 	c.r.Reset(c.conn)
 	c.w.Reset(c.conn)
 
-	nonce, err := c.readHelo()
+	var salt [24]byte
+
+	if _, err = rand.Read(salt[:]); err != nil {
+		return
+	}
+
+	nonce, auth, err := c.readHelo()
 
 	if err != nil {
 		return
 	}
 
-	salt, err := c.writePing(nonce)
-
-	if err != nil {
+	if err = c.writePing(&cred, fast.BytesToString(salt[:]), nonce, auth); err != nil {
 		return
 	}
 
-	if err = c.readPong(nonce, salt); err != nil {
+	if err = c.readPong(fast.BytesToString(salt[:]), nonce, cred.SharedKey); err != nil {
 		return
 	}
 
