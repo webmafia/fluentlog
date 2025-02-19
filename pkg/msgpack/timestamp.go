@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 type TsFormat uint8

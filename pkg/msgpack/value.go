@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 var (

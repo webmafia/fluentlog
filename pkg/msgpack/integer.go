@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // ReadInt reads a MessagePack-encoded integer from `src` starting at `offset`.

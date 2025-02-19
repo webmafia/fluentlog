@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 func BenchmarkAppend(b *testing.B) {

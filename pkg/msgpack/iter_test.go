@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // BuildComplexMessage creates a deep, complex MessagePack message using Append* functions.

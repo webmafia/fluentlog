@@ -7,7 +7,7 @@ import (
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // AppendString appends the string `s` as a MessagePack-encoded value to `dst`.

@@ -1,6 +1,6 @@
 package msgpack
 
-import "github.com/webmafia/fluentlog/internal/msgpack/types"
+import "github.com/webmafia/fluentlog/pkg/msgpack/types"
 
 // AppendArrayHeader appends a MessagePack array header to `dst` based on the number of elements `n`.
 // Returns the updated byte slice.

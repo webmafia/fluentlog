@@ -1,6 +1,6 @@
 package msgpack
 
-import "github.com/webmafia/fluentlog/internal/msgpack/types"
+import "github.com/webmafia/fluentlog/pkg/msgpack/types"
 
 // AppendMapHeader appends a map header with `n` key-value pairs to `dst` as a MessagePack-encoded value.
 // Returns the updated byte slice.

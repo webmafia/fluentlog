@@ -13,8 +13,8 @@ import (
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fast/bufio"
-	"github.com/webmafia/fluentlog/internal/msgpack"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 type ServerConn struct {

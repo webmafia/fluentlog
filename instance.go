@@ -10,7 +10,7 @@ import (
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/fallback"
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 	"github.com/webmafia/identifier"
 )
 

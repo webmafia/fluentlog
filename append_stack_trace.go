@@ -6,7 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 // An exact copy of runtime.Frames

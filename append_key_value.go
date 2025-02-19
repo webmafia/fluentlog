@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/webmafia/fluentlog/internal"
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 func appendKeyValue(dst []byte, key string, value any) ([]byte, uint8) {

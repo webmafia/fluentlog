@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 const (

@@ -1,7 +1,7 @@
 package msgpack
 
 import (
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // AppendBool appends a boolean value (`true` or `false`) as a MessagePack-encoded boolean to `dst`.

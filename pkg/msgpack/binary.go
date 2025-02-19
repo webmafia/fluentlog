@@ -3,7 +3,7 @@ package msgpack
 import (
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fluentlog/internal"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // AppendBinary appends a MessagePack binary header and the binary `data` to `dst`.

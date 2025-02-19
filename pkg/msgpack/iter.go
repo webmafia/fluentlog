@@ -8,7 +8,7 @@ import (
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/bufio"
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // Low-level iteration of a MessagePack stream.

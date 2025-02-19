@@ -3,7 +3,7 @@ package fluentlog
 import (
 	"testing"
 
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 func Benchmark_appendKeyValue(b *testing.B) {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/gzip"
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 type Server struct {

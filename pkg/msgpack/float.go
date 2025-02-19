@@ -3,7 +3,7 @@ package msgpack
 import (
 	"math"
 
-	"github.com/webmafia/fluentlog/internal/msgpack/types"
+	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // AppendFloat appends a floating-point value (`f`) as a MessagePack-encoded float32 or float64 to `dst`.

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/webmafia/fluentlog/forward"
-	"github.com/webmafia/fluentlog/internal/msgpack"
+	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 func main() {
