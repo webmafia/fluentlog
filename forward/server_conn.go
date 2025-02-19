@@ -57,6 +57,9 @@ func (s *ServerConn) Handle(ctx context.Context) (err error) {
 func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 	s.log("initializing handshake phase...")
 
+	s.r.LockBuffer()
+	defer s.r.UnlockBuffer()
+
 	var nonceAuth [48]byte
 
 	if _, err = rand.Read(nonceAuth[:]); err != nil {
