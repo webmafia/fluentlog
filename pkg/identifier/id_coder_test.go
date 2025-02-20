@@ -15,6 +15,15 @@ func BenchmarkID_AppendText(b *testing.B) {
 	}
 }
 
+func BenchmarkIDFromString(b *testing.B) {
+	id := Generate().String()
+	b.ResetTimer()
+
+	for range b.N {
+		_, _ = IDFromString(id)
+	}
+}
+
 func TestMultiplierInverse(t *testing.T) {
 	var multiplier = multiplier
 	var invMultiplier = invMultiplier

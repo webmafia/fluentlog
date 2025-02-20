@@ -35,7 +35,6 @@ func IDFromString(str string) (id ID, err error) {
 
 	// Multiply by the precomputed multiplicative inverse to recover the original value.
 	// The multiplication is performed modulo 2^64.
-
 	original := scrambled * invMultiplier
 
 	return ID(original), nil
