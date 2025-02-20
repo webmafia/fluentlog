@@ -2,7 +2,7 @@ package fluentlog
 
 import (
 	"github.com/webmafia/fast/buffer"
-	"github.com/webmafia/identifier"
+	"github.com/webmafia/fluentlog/pkg/identifier"
 )
 
 // A logger with optional meta data, which every log entry will inherit.

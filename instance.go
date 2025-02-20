@@ -10,8 +10,8 @@ import (
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/fallback"
+	"github.com/webmafia/fluentlog/pkg/identifier"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
-	"github.com/webmafia/identifier"
 )
 
 type Instance struct {
@@ -161,7 +161,7 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 
 	b.B[x]++
 	b.B = msgpack.AppendString(b.B, "@id")
-	b.B = msgpack.AppendInt(b.B, id.Int64())
+	b.B = msgpack.AppendUint(b.B, id.Uint64())
 
 	b.B[x]++
 	b.B = msgpack.AppendString(b.B, "@pri")
