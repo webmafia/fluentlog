@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"log"
 	"net"
 	"strings"
 	"time"
@@ -93,7 +92,8 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 func (s *ServerConn) Entries() iter.Seq2[time.Time, *msgpack.Iterator] {
 	return func(yield func(time.Time, *msgpack.Iterator) bool) {
 		if err := s.transportPhase(yield); err != nil {
-			log.Println(err)
+			// log.Println(err)
+			_ = err
 		}
 	}
 }
@@ -200,7 +200,7 @@ func (s *ServerConn) messageMode(yield func(time.Time, *msgpack.Iterator) bool, 
 		return
 	}
 
-	return yield(ts, s.r), nil
+	return yield(ts, fast.NoescapeVal(s.r)), nil
 }
 
 // The Forward Mode has the following format:
@@ -312,7 +312,7 @@ func (s *ServerConn) iterateEntry(yield func(time.Time, *msgpack.Iterator) bool,
 		return
 	}
 
-	return yield(ts, iter), nil
+	return yield(ts, fast.NoescapeVal(iter)), nil
 }
 
 func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
