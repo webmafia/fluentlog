@@ -322,6 +322,9 @@ func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
 		return
 	}
 
+	// Bounds check hint to compiler; see golang.org/issue/14808
+	_ = magicNumbers[2]
+
 	ok = (magicNumbers[0] == 0x1f &&
 		magicNumbers[1] == 0x8b &&
 		magicNumbers[2] == 8)
