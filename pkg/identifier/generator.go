@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-// Non-thread-safe ID generator.
+// Non-thread-safe ID generator. Can generate 2^22 (or 4 194 304) locally unique IDs
+// per millisecond, before it wraps around and starts generating duplicates.
 type Generator struct {
 	seq uint32
 }
@@ -30,7 +31,8 @@ func (g *Generator) IDFromTime(ts time.Time) (id ID) {
 	return
 }
 
-// Thread-safe ID generator.
+// Thread-safe ID generator. Can generate 2^22 (or 4 194 304) locally unique IDs
+// per millisecond, before it wraps around and starts generating duplicates.
 type AtomicGenerator struct {
 	seq uint32
 }
