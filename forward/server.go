@@ -45,7 +45,7 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, handler Handler) (err error) {
+func (s *Server) Listen(ctx context.Context, handler func(c *ServerConn) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -89,23 +89,22 @@ func (s *Server) Listen(ctx context.Context, handler Handler) (err error) {
 			wBuf := s.bufPool.Get()
 			defer s.bufPool.Put(wBuf)
 
-			tag := s.bufPool.Get()
-			defer s.bufPool.Put(tag)
+			state := s.bufPool.Get()
+			defer s.bufPool.Put(state)
 
 			sc := ServerConn{
-				serv:    s,
-				conn:    conn,
-				r:       iter,
-				w:       msgpack.NewWriter(conn, wBuf),
-				tag:     tag,
-				handler: handler,
+				serv:  s,
+				conn:  conn,
+				r:     iter,
+				w:     msgpack.NewWriter(conn, wBuf),
+				state: state,
 			}
 
-			if err := sc.Handle(ctx); err != nil {
+			if err := sc.handle(ctx, handler); err != nil {
 				log.Println(err)
 			}
 
-			sc.log("received %d entries (totally %d bytes, or ~%d b/entry)", sc.entries, sc.r.TotalRead(), sc.r.TotalRead()/sc.entries)
+			sc.log("received %d entries (totally %d bytes)", sc.entries, sc.r.TotalRead())
 			sc.log("disconnected")
 		}()
 	}

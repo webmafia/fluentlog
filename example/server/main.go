@@ -5,10 +5,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/webmafia/fluentlog/forward"
-	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
 func main() {
@@ -32,24 +30,27 @@ func startServer(ctx context.Context) (err error) {
 		}),
 	})
 
-	return serv.Listen(ctx, func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error {
-		log.Println(tag, ts)
-		log.Println("received entry of", numFields, "fields")
+	return serv.Listen(ctx, func(c *forward.ServerConn) error {
+		for ts, rec := range c.Entries() {
+			numFields := rec.Items()
+			log.Println(c.Username(), c.Tag(), ts)
+			log.Println("received entry of", numFields, "fields")
 
-		for range numFields {
-			if !iter.Next() {
-				return iter.Error()
+			for range numFields {
+				if !rec.Next() {
+					return rec.Error()
+				}
+
+				key := rec.Any()
+
+				if !rec.Next() {
+					return rec.Error()
+				}
+
+				val := rec.Any()
+
+				log.Println("  ", key, "=", val)
 			}
-
-			key := iter.Any()
-
-			if !iter.Next() {
-				return iter.Error()
-			}
-
-			val := iter.Any()
-
-			log.Println("  ", key, "=", val)
 		}
 
 		return nil

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"iter"
 	"log"
 	"net"
 	"strings"
@@ -18,16 +19,25 @@ import (
 )
 
 type ServerConn struct {
-	serv    *Server
-	conn    net.Conn
-	r       *msgpack.Iterator
-	w       msgpack.Writer
-	tag     *buffer.Buffer
-	handler Handler
-	entries int
+	serv      *Server
+	conn      net.Conn
+	r         *msgpack.Iterator
+	w         msgpack.Writer
+	state     *buffer.Buffer
+	user, tag string
 }
 
-type Handler func(tag string, ts time.Time, iter *msgpack.Iterator, numFields int) error
+func (s *ServerConn) Username() string {
+	return s.user
+}
+
+func (s *ServerConn) Tag() string {
+	return s.tag
+}
+
+func (s *ServerConn) TotalRead() int {
+	return s.r.TotalRead()
+}
 
 func (s *ServerConn) String() string {
 	_, port, _ := strings.Cut(s.conn.RemoteAddr().String(), ":")
@@ -38,7 +48,7 @@ func (s *ServerConn) log(str string, args ...any) {
 	log.Println("client", s.String(), "|", fmt.Sprintf(str, args...))
 }
 
-func (s *ServerConn) Handle(ctx context.Context) (err error) {
+func (s *ServerConn) handle(ctx context.Context, handler func(c *ServerConn) error) (err error) {
 	defer s.conn.Close()
 
 	s.log("connected")
@@ -47,11 +57,7 @@ func (s *ServerConn) Handle(ctx context.Context) (err error) {
 		return
 	}
 
-	if err = s.transportPhase(); err != nil {
-		return
-	}
-
-	return
+	return handler(fast.NoescapeVal(s))
 }
 
 func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
@@ -87,9 +93,26 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 		return
 	}
 
+	s.user = s.stateString(cred.Username)
 	s.log("authenticated")
 
 	return
+}
+
+func (s *ServerConn) Entries() iter.Seq2[time.Time, *msgpack.Iterator] {
+	return func(yield func(time.Time, *msgpack.Iterator) bool) {
+		if err := s.transportPhase(yield); err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func (s *ServerConn) stateString(str string) string {
+	start := len(s.state.B)
+	s.state.B = append(s.state.B, str...)
+	end := len(s.state.B)
+
+	return fast.BytesToString(s.state.B[start:end])
 }
 
 // Once the connection becomes transport phase, client can send events to servers, in one event mode of:
@@ -97,10 +120,12 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 //   - Forward Mode (an array of messages)
 //   - PackedForward Mode (an array of messages sent as binary)
 //   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
-func (s *ServerConn) transportPhase() (err error) {
+func (s *ServerConn) transportPhase(yield func(time.Time, *msgpack.Iterator) bool) (err error) {
 	s.log("initializing transport phase...")
 
-	for {
+	more := true
+
+	for more {
 		// 0) Array of 2-4 items
 		if err = s.r.NextExpectedType(types.Array); err != nil {
 			return
@@ -124,8 +149,7 @@ func (s *ServerConn) transportPhase() (err error) {
 		if s.r.Len() > 64 {
 			return fmt.Errorf("too long tag (%d chars), must be max %d chars", s.r.Len(), 64)
 		}
-		s.tag.Reset()
-		s.tag.Write(s.r.Bin())
+		s.tag = s.stateString(s.r.Str())
 
 		// 2) Time or Entries (Array / Bin / Str)
 		if !s.r.Next() {
@@ -136,14 +160,14 @@ func (s *ServerConn) transportPhase() (err error) {
 		switch s.r.Type() {
 
 		case types.Ext, types.Int, types.Uint:
-			err = s.messageMode(s.r.Time(), evLen)
+			more, err = s.messageMode(yield, s.r.Time(), evLen)
 			evLen--
 
 		case types.Array:
-			err = s.forwardMode(s.r.Items())
+			more, err = s.forwardMode(yield, s.r.Items())
 
 		case types.Bin:
-			err = s.binary()
+			more, err = s.binary(yield)
 
 		default:
 			return ErrInvalidEntry
@@ -161,6 +185,8 @@ func (s *ServerConn) transportPhase() (err error) {
 			}
 		}
 	}
+
+	return
 }
 
 // The Message Mode has the following format:
@@ -171,29 +197,23 @@ func (s *ServerConn) transportPhase() (err error) {
 //	  {"message": "bar"},       // 3. record
 //	  {"chunk": "<<UniqueId>>"} // 4. option (optional)
 //	]
-func (s *ServerConn) messageMode(ts time.Time, evLen int) (err error) {
+func (s *ServerConn) messageMode(yield func(time.Time, *msgpack.Iterator) bool, ts time.Time, evLen int) (more bool, err error) {
 	s.log("Message Mode")
 
 	if evLen < 1 {
-		return ErrInvalidEntry
+		return false, ErrInvalidEntry
 	}
 
 	if ts.IsZero() {
-		return ErrInvalidEntry
+		return false, ErrInvalidEntry
 	}
 
 	// 3) Record
 	if err = s.r.NextExpectedType(types.Map); err != nil {
 		return
 	}
-	numFields := s.r.Items()
-	// rec := s.r.Value()
 
-	// if err = s.r.Error(); err != nil {
-	// 	return
-	// }
-
-	return s.entry(ts, s.r, numFields)
+	return yield(ts, s.r), nil
 }
 
 // The Forward Mode has the following format:
@@ -207,11 +227,11 @@ func (s *ServerConn) messageMode(ts time.Time, evLen int) (err error) {
 //	  ],
 //	  {"chunk": "<<UniqueId>>"}           // 3. options (optional)
 //	]
-func (s *ServerConn) forwardMode(arrLen int) (err error) {
+func (s *ServerConn) forwardMode(yield func(time.Time, *msgpack.Iterator) bool, arrLen int) (more bool, err error) {
 	s.log("Forward Mode")
 
 	for range arrLen {
-		if err = s.iterateEntry(s.r); err != nil {
+		if more, err = s.iterateEntry(yield, s.r); !more {
 			return
 		}
 	}
@@ -219,7 +239,7 @@ func (s *ServerConn) forwardMode(arrLen int) (err error) {
 	return
 }
 
-func (s *ServerConn) binary() (err error) {
+func (s *ServerConn) binary(yield func(time.Time, *msgpack.Iterator) bool) (more bool, err error) {
 	r := s.r.Reader()
 	isGzip, err := s.isGzip(r)
 
@@ -228,10 +248,10 @@ func (s *ServerConn) binary() (err error) {
 	}
 
 	if isGzip {
-		return s.compressedPackedForwardMode(r)
+		return s.compressedPackedForwardMode(yield, r)
 	}
 
-	return s.packedForwardMode(r)
+	return s.packedForwardMode(yield, r)
 }
 
 // The PackedForward Mode has the following format:
@@ -241,14 +261,14 @@ func (s *ServerConn) binary() (err error) {
 //	  "<<MessagePackEventStream>>", // 2. binary (bin) field of concatenated entries
 //	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
 //	]
-func (s *ServerConn) packedForwardMode(br *bufio.LimitedReader) (err error) {
+func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
 	s.log("PackedForward Mode")
 
 	iter := s.serv.iterPool.Get(br)
 	defer s.serv.iterPool.Put(iter)
 
 	for {
-		if err = s.iterateEntry(iter); err != nil {
+		if more, err = s.iterateEntry(yield, iter); !more {
 			return
 		}
 	}
@@ -261,7 +281,7 @@ func (s *ServerConn) packedForwardMode(br *bufio.LimitedReader) (err error) {
 //	  "<<CompressedMessagePackEventStream>>",         // 2. binary (bin) field of concatenated entries
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
-func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err error) {
+func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
 	s.log("CompressedPackedForward Mode")
 
 	// r, err := gzip.NewReader(br)
@@ -278,7 +298,7 @@ func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err e
 	defer s.serv.iterPool.Put(iter)
 
 	for {
-		if err = s.iterateEntry(iter); err != nil {
+		if more, err = s.iterateEntry(yield, iter); !more {
 			return
 		}
 	}
@@ -290,14 +310,14 @@ func (s *ServerConn) compressedPackedForwardMode(br *bufio.LimitedReader) (err e
 //	  1441588984,               // 1. time
 //	  {"message": "bar"}        // 2. record
 //	]
-func (s *ServerConn) iterateEntry(iter *msgpack.Iterator) (err error) {
+func (s *ServerConn) iterateEntry(yield func(time.Time, *msgpack.Iterator) bool, iter *msgpack.Iterator) (more bool, err error) {
 
 	// 0) Array of 2 items
 	if err = iter.NextExpectedType(types.Array); err != nil {
 		return
 	}
 	if items := iter.Items(); items != 2 {
-		return ErrInvalidEntry
+		return false, ErrInvalidEntry
 	}
 
 	// 1) Timestamp
@@ -310,14 +330,8 @@ func (s *ServerConn) iterateEntry(iter *msgpack.Iterator) (err error) {
 	if err = iter.NextExpectedType(types.Map); err != nil {
 		return
 	}
-	numFields := iter.Items()
-	// rec := iter.Value()
 
-	// if err = iter.Error(); err != nil {
-	// 	return
-	// }
-
-	return s.entry(ts, iter, numFields)
+	return yield(ts, iter), nil
 }
 
 func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
@@ -332,11 +346,6 @@ func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
 		magicNumbers[2] == 8)
 
 	return
-}
-
-func (s *ServerConn) entry(ts time.Time, iter *msgpack.Iterator, numFields int) (err error) {
-	s.entries++
-	return s.handler(s.tag.String(), ts, iter, numFields)
 }
 
 // Iterate options to find "chunk" value, and send ack back to client.
