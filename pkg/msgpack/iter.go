@@ -106,11 +106,7 @@ func (iter *Iterator) NextExpectedType(expected ...types.Type) (err error) {
 		}
 	}
 
-	return iter.expectedTypes(expected...)
-}
-
-func (iter *Iterator) expectedTypes(expected ...types.Type) (err error) {
-	return fmt.Errorf("%w: expected any of %v, got %s", ErrInvalidHeaderByte, expected, iter.typ)
+	return fmt.Errorf("%w: expected any of %v, got %s", ErrInvalidHeaderByte, *fast.NoescapeVal(&expected), iter.typ)
 }
 
 func (iter *Iterator) Type() types.Type {
