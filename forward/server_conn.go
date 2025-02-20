@@ -44,14 +44,8 @@ func (s *ServerConn) String() string {
 	return port
 }
 
-func (s *ServerConn) log(str string, args ...any) {
-	log.Println("client", s.String(), "|", fmt.Sprintf(str, args...))
-}
-
 func (s *ServerConn) handle(ctx context.Context, handler func(c *ServerConn) error) (err error) {
 	defer s.conn.Close()
-
-	s.log("connected")
 
 	if err = s.handshakePhase(ctx); err != nil {
 		return
@@ -61,8 +55,6 @@ func (s *ServerConn) handle(ctx context.Context, handler func(c *ServerConn) err
 }
 
 func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
-	s.log("initializing handshake phase...")
-
 	s.r.LockBuffer()
 	defer s.r.UnlockBuffer()
 
@@ -94,7 +86,6 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 	}
 
 	s.user = s.stateString(cred.Username)
-	s.log("authenticated")
 
 	return
 }
@@ -121,8 +112,6 @@ func (s *ServerConn) stateString(str string) string {
 //   - PackedForward Mode (an array of messages sent as binary)
 //   - CompressedPackedForward Mode (an array of messages sent as compressed binary)
 func (s *ServerConn) transportPhase(yield func(time.Time, *msgpack.Iterator) bool) (err error) {
-	s.log("initializing transport phase...")
-
 	more := true
 
 	for more {
@@ -198,8 +187,6 @@ func (s *ServerConn) transportPhase(yield func(time.Time, *msgpack.Iterator) boo
 //	  {"chunk": "<<UniqueId>>"} // 4. option (optional)
 //	]
 func (s *ServerConn) messageMode(yield func(time.Time, *msgpack.Iterator) bool, ts time.Time, evLen int) (more bool, err error) {
-	s.log("Message Mode")
-
 	if evLen < 1 {
 		return false, ErrInvalidEntry
 	}
@@ -228,8 +215,6 @@ func (s *ServerConn) messageMode(yield func(time.Time, *msgpack.Iterator) bool, 
 //	  {"chunk": "<<UniqueId>>"}           // 3. options (optional)
 //	]
 func (s *ServerConn) forwardMode(yield func(time.Time, *msgpack.Iterator) bool, arrLen int) (more bool, err error) {
-	s.log("Forward Mode")
-
 	for range arrLen {
 		if more, err = s.iterateEntry(yield, s.r); !more {
 			return
@@ -262,8 +247,6 @@ func (s *ServerConn) binary(yield func(time.Time, *msgpack.Iterator) bool) (more
 //	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
 //	]
 func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
-	s.log("PackedForward Mode")
-
 	iter := s.serv.iterPool.Get(br)
 	defer s.serv.iterPool.Put(iter)
 
@@ -282,8 +265,6 @@ func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) 
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
 func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
-	s.log("CompressedPackedForward Mode")
-
 	// r, err := gzip.NewReader(br)
 	// r, err := gzip.NewReader(br)
 	r, err := s.serv.gzipPool.Get(br)
@@ -380,8 +361,6 @@ func (s *ServerConn) ack() (err error) {
 		s.w.WriteMapHeader(1)
 		s.w.WriteString("ack")
 		s.w.WriteString(chunk)
-
-		s.log("ack %s", chunk)
 
 		if err = s.w.Flush(); err != nil {
 			return

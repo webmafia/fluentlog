@@ -103,9 +103,6 @@ func (s *Server) Listen(ctx context.Context, handler func(c *ServerConn) error) 
 			if err := sc.handle(ctx, handler); err != nil {
 				log.Println(err)
 			}
-
-			sc.log("received %d entries (totally %d bytes)", sc.entries, sc.r.TotalRead())
-			sc.log("disconnected")
 		}()
 	}
 }
