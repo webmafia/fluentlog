@@ -36,20 +36,24 @@ func (a dummyAddr) String() string  { return string(a) }
 // In this example we use a Message Mode event:
 //
 //	[ "tag", 1441588984, {"message": "test"} ]
-var validPayload = []byte{
-	0x93,                   // array of 3 elements
-	0xa3, 0x74, 0x61, 0x67, // "tag"
-	0xce, 0x56, 0x21, 0x8c, 0x98, // uint32 1441588984 (big-endian)
-	0x81,                                           // map of 1 element
-	0xa7, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, // "message"
-	0xa4, 0x74, 0x65, 0x73, 0x74, // "test"
+func createPayload() (b []byte) {
+	b = msgpack.AppendArrayHeader(b, 3)
+	b = msgpack.AppendString(b, "tag")
+	b = msgpack.AppendInt(b, 1441588984)
+	b = msgpack.AppendMapHeader(b, 1)
+	b = msgpack.AppendString(b, "message")
+	b = msgpack.AppendString(b, "test")
+
+	return
 }
 
 func BenchmarkEntries(b *testing.B) {
+	validPayload := createPayload()
+
 	// Create an iterator from the valid payload.
 	// We assume msgpack.NewIterator takes a byte slice.
-	it := msgpack.NewIterator(nil)
-	it.ResetBytes(validPayload)
+	// it := msgpack.NewIterator(nil)
+	// it.ResetBytes(validPayload)
 
 	// Create a dummy connection.
 	conn := &dummyConn{}
@@ -57,6 +61,7 @@ func BenchmarkEntries(b *testing.B) {
 	s := NewServer(ServerOptions{})
 
 	iter := s.iterPool.Get(conn)
+	iter.ResetBytes(validPayload)
 	wBuf := s.bufPool.Get()
 	state := s.bufPool.Get()
 
