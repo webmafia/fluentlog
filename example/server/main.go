@@ -30,7 +30,7 @@ func startServer(ctx context.Context) (err error) {
 		}),
 	})
 
-	return serv.Listen(ctx, func(c *forward.ServerConn) error {
+	return serv.Listen(ctx, func(ctx context.Context, c *forward.ServerConn) error {
 		for ts, rec := range c.Entries() {
 			numFields := rec.Items()
 			log.Println(c.Username(), c.Tag(), ts)

@@ -45,7 +45,7 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, handler func(c *ServerConn) error) (err error) {
+func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, conn *ServerConn) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

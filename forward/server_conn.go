@@ -43,14 +43,14 @@ func (s *ServerConn) String() string {
 	return port
 }
 
-func (s *ServerConn) handle(ctx context.Context, handler func(c *ServerConn) error) (err error) {
+func (s *ServerConn) handle(ctx context.Context, handler func(ctx context.Context, conn *ServerConn) error) (err error) {
 	defer s.conn.Close()
 
 	if err = s.handshakePhase(ctx); err != nil {
 		return
 	}
 
-	return handler(fast.NoescapeVal(s))
+	return handler(ctx, fast.NoescapeVal(s))
 }
 
 func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
