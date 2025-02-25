@@ -2,3 +2,5 @@ github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IX
 github.com/klauspost/compress v1.17.11/go.mod h1:pMDklpSncoRMuLFrf1W9Ss9KT+0rH90U12bZKk7uwG0=
 github.com/webmafia/fast v0.14.0 h1:YgvLChB04A+PyMQbtgWa71mlyHiFFiYl3VxOB6jXUTQ=
 github.com/webmafia/fast v0.14.0/go.mod h1:MjWuDwKdCP1APS96wqOlQ9ZU5gqPmHfstQgDYGpG0pQ=
+github.com/webmafia/fast v0.15.0 h1:7EX11B7CbMoOckaduIoyge9ONlq3DmHTI7saI4WSMis=
+github.com/webmafia/fast v0.15.0/go.mod h1:MjWuDwKdCP1APS96wqOlQ9ZU5gqPmHfstQgDYGpG0pQ=

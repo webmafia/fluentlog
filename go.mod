@@ -2,9 +2,9 @@ module github.com/webmafia/fluentlog
 
 go 1.23
 
-replace github.com/webmafia/fast => ../go-fast
+// replace github.com/webmafia/fast => ../go-fast
 
 require (
 	github.com/klauspost/compress v1.17.11
-	github.com/webmafia/fast v0.14.0
+	github.com/webmafia/fast v0.15.0
 )
