@@ -15,7 +15,6 @@ import (
 type Iterator struct {
 	r      *bufio.Reader
 	err    error
-	n      int        // Cursor position
 	length int        // Token value length
 	items  int        // Number of array/map items
 	byt    byte       // Head byte
@@ -34,7 +33,6 @@ func (iter *Iterator) Error() error {
 
 func (iter *Iterator) Reset(r io.Reader, maxBufSize ...int) {
 	iter.r.ResetReader(r)
-	iter.reset()
 
 	if len(maxBufSize) > 0 {
 		iter.r.SetMaxSize(maxBufSize[0])
@@ -43,15 +41,10 @@ func (iter *Iterator) Reset(r io.Reader, maxBufSize ...int) {
 
 func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
 	iter.r.ResetBytes(b)
-	iter.reset()
 
 	if len(maxBufSize) > 0 {
 		iter.r.SetMaxSize(maxBufSize[0])
 	}
-}
-
-func (iter *Iterator) reset() {
-	iter.n = 0
 }
 
 // Read next token. Must be called before any Read* method.
@@ -106,7 +99,7 @@ func (iter *Iterator) NextExpectedType(expected ...types.Type) (err error) {
 		}
 	}
 
-	return fmt.Errorf("%w: expected any of %v, got %s", ErrInvalidHeaderByte, *fast.NoescapeVal(&expected), iter.typ)
+	return fmt.Errorf("%w: expected any of %v, got %s (%02X)\n%s", ErrInvalidHeaderByte, *fast.NoescapeVal(&expected), iter.typ, iter.byt, iter.r.DebugState(64))
 }
 
 func (iter *Iterator) Type() types.Type {
@@ -216,7 +209,6 @@ func (r *Iterator) TotalRead() int {
 	return r.r.TotalRead()
 }
 
-// Sets the release point as current position. Anything before this will be kept after release.
 func (iter *Iterator) LockBuffer() bool {
 	return iter.r.Lock()
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -92,8 +93,8 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 func (s *ServerConn) Entries() iter.Seq2[time.Time, *msgpack.Iterator] {
 	return func(yield func(time.Time, *msgpack.Iterator) bool) {
 		if err := s.transportPhase(yield); err != nil {
-			// log.Println(err)
-			_ = err
+			log.Println(err)
+			// _ = err
 		}
 	}
 }
