@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"log"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
-	"github.com/webmafia/fast/bufio"
+	"github.com/webmafia/fast/ringbuf"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
@@ -55,8 +54,8 @@ func (s *ServerConn) handle(ctx context.Context, handler func(ctx context.Contex
 }
 
 func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
-	s.r.LockBuffer()
-	defer s.r.UnlockBuffer()
+	// s.r.LockBuffer()
+	// defer s.r.UnlockBuffer()
 
 	var nonceAuth [48]byte
 
@@ -92,9 +91,8 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 
 func (s *ServerConn) Entries() iter.Seq2[time.Time, *msgpack.Iterator] {
 	return func(yield func(time.Time, *msgpack.Iterator) bool) {
-		if err := s.transportPhase(yield); err != nil {
-			log.Println(err)
-			// _ = err
+		if err := s.transportPhase(yield); err != nil && err != io.EOF {
+			s.serv.opt.HandleError(err)
 		}
 	}
 }
@@ -247,7 +245,7 @@ func (s *ServerConn) binary(yield func(time.Time, *msgpack.Iterator) bool) (more
 //	  "<<MessagePackEventStream>>", // 2. binary (bin) field of concatenated entries
 //	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
 //	]
-func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
+func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *ringbuf.LimitedReader) (more bool, err error) {
 	iter := s.serv.iterPool.Get(br)
 	defer s.serv.iterPool.Put(iter)
 
@@ -265,7 +263,7 @@ func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) 
 //	  "<<CompressedMessagePackEventStream>>",         // 2. binary (bin) field of concatenated entries
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
-func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *bufio.LimitedReader) (more bool, err error) {
+func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *ringbuf.LimitedReader) (more bool, err error) {
 	// r, err := gzip.NewReader(br)
 	// r, err := gzip.NewReader(br)
 	r, err := s.serv.gzipPool.Get(br)
@@ -316,7 +314,7 @@ func (s *ServerConn) iterateEntry(yield func(time.Time, *msgpack.Iterator) bool,
 	return yield(ts, fast.NoescapeVal(iter)), nil
 }
 
-func (*ServerConn) isGzip(r *bufio.LimitedReader) (ok bool, err error) {
+func (*ServerConn) isGzip(r *ringbuf.LimitedReader) (ok bool, err error) {
 	magicNumbers, err := r.Peek(3)
 
 	if err != nil {
@@ -356,7 +354,6 @@ func (s *ServerConn) ack() (err error) {
 		}
 
 		if key != "chunk" {
-			// log.Println("skipped", key, "=", val)
 			s.r.Skip()
 			continue
 		}

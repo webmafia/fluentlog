@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
-	"github.com/webmafia/fast/bufio"
+	"github.com/webmafia/fast/ringbuf"
 )
 
 func sampleData() (b []byte, err error) {
@@ -59,7 +59,7 @@ func ExampleReader() {
 	}
 
 	// br := bufio.NewReader(&buf)
-	br := bufio.NewReader(&buf).LimitReader(buf.Len())
+	br := ringbuf.NewReader(&buf).LimitReader(buf.Len())
 	r, err := NewReader(br)
 
 	if err != nil {
@@ -106,7 +106,7 @@ func BenchmarkReader_Reset(b *testing.B) {
 	}
 
 	bufReader := bytes.NewReader(buf)
-	br := bufio.NewReader(bufReader)
+	br := ringbuf.NewReader(bufReader)
 	r, err := NewReader(br)
 
 	if err != nil {
@@ -133,7 +133,7 @@ func BenchmarkReader(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	br := bufio.NewReader(nil)
+	br := ringbuf.NewReader(nil)
 	br.ResetBytes(buf)
 	r, err := NewReader(br)
 

@@ -50,6 +50,10 @@ func startServer(ctx context.Context) (err error) {
 				val := rec.Any()
 
 				log.Println("  ", key, "=", val)
+
+				if key == "message" && val == "hello 199" {
+					log.Println("tada")
+				}
 			}
 		}
 

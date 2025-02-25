@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
@@ -81,13 +80,6 @@ func (c *Client) readHelo() (nonce, auth string, err error) {
 			keepAlive = c.r.Bool()
 
 		}
-	}
-
-	log.Println("nonce:", nonce)
-	log.Println("keepalive:", keepAlive)
-
-	if len(auth) > 0 {
-		log.Println("auth:", auth)
 	}
 
 	if len(nonce) == 0 {

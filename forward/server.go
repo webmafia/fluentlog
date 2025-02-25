@@ -22,6 +22,7 @@ type ServerOptions struct {
 	Address      string
 	Hostname     string
 	Tls          *tls.Config // E.g. from golang.org/x/crypto/acme/autocert
+	HandleError  func(err error)
 	Auth         AuthServer
 	PasswordAuth bool
 }
@@ -37,11 +38,15 @@ func NewServer(opt ServerOptions) *Server {
 		opt.Auth = func(ctx context.Context, username string) (cred Credentials, err error) { return }
 	}
 
+	if opt.HandleError == nil {
+		opt.HandleError = func(err error) {}
+	}
+
 	return &Server{
 		opt: opt,
-		iterPool: msgpack.IterPool{
-			BufMaxSize: 16 * 1024, // 16 kB
-		},
+		// iterPool: msgpack.IterPool{
+		// 	BufMaxSize: 16 * 1024, // 16 kB
+		// },
 	}
 }
 
@@ -101,7 +106,7 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, c
 			}
 
 			if err := sc.handle(ctx, handler); err != nil {
-				log.Println(err)
+				s.opt.HandleError(err)
 			}
 		}()
 	}

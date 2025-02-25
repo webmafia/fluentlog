@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fast/bufio"
+	"github.com/webmafia/fast/ringbuf"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
 // Low-level iteration of a MessagePack stream.
 type Iterator struct {
-	r      *bufio.Reader
+	r      *ringbuf.Reader
 	err    error
 	length int        // Token value length
 	items  int        // Number of array/map items
@@ -23,7 +23,7 @@ type Iterator struct {
 
 func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
 	return Iterator{
-		r: bufio.NewReader(r, maxBufSize...),
+		r: ringbuf.NewReader(r),
 	}
 }
 
@@ -32,19 +32,11 @@ func (iter *Iterator) Error() error {
 }
 
 func (iter *Iterator) Reset(r io.Reader, maxBufSize ...int) {
-	iter.r.ResetReader(r)
-
-	if len(maxBufSize) > 0 {
-		iter.r.SetMaxSize(maxBufSize[0])
-	}
+	iter.r.Reset(r)
 }
 
 func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
 	iter.r.ResetBytes(b)
-
-	if len(maxBufSize) > 0 {
-		iter.r.SetMaxSize(maxBufSize[0])
-	}
 }
 
 // Read next token. Must be called before any Read* method.
@@ -99,7 +91,7 @@ func (iter *Iterator) NextExpectedType(expected ...types.Type) (err error) {
 		}
 	}
 
-	return fmt.Errorf("%w: expected any of %v, got %s (%02X)\n%s", ErrInvalidHeaderByte, *fast.NoescapeVal(&expected), iter.typ, iter.byt, iter.r.DebugState(64))
+	return fmt.Errorf("%w: expected any of %v, got %s (%02X)", ErrInvalidHeaderByte, *fast.NoescapeVal(&expected), iter.typ, iter.byt)
 }
 
 func (iter *Iterator) Type() types.Type {
@@ -175,7 +167,7 @@ func (iter *Iterator) Time() time.Time {
 	return time.Time{}
 }
 
-func (iter *Iterator) Reader() *bufio.LimitedReader {
+func (iter *Iterator) Reader() *ringbuf.LimitedReader {
 	return iter.r.LimitReader(iter.length)
 }
 
@@ -206,15 +198,9 @@ func (iter *Iterator) Skip() {
 
 // Get total bytes read
 func (r *Iterator) TotalRead() int {
-	return r.r.TotalRead()
-}
-
-func (iter *Iterator) LockBuffer() bool {
-	return iter.r.Lock()
-}
-
-func (iter *Iterator) UnlockBuffer() bool {
-	return iter.r.Unlock()
+	// TODO
+	return 0
+	// return r.r.TotalRead()
 }
 
 func (iter *Iterator) reportError(op string, err any) bool {

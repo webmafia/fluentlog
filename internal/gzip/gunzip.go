@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"github.com/klauspost/compress/flate"
-	"github.com/webmafia/fast/bufio"
+	"github.com/webmafia/fast/ringbuf"
 )
 
 const (
@@ -46,7 +46,7 @@ type inflate interface {
 // each with its own header. Reads from the Reader
 // return the concatenation of the uncompressed data of each.
 type Reader struct {
-	br           bufio.BufioReader
+	br           ringbuf.RingBufferReader
 	decompressor inflate
 }
 
@@ -55,7 +55,7 @@ type Reader struct {
 // the decompressor may read more data than necessary from r.
 //
 // It is the caller's responsibility to call Close on the Reader when done.
-func NewReader(br bufio.BufioReader) (*Reader, error) {
+func NewReader(br ringbuf.RingBufferReader) (*Reader, error) {
 	z := new(Reader)
 
 	if err := z.Reset(br); err != nil {
@@ -68,7 +68,7 @@ func NewReader(br bufio.BufioReader) (*Reader, error) {
 // Reset discards the Reader z's state and makes it equivalent to the
 // result of its original state from NewReader, but reading from r instead.
 // This permits reusing a Reader rather than allocating a new one.
-func (z *Reader) Reset(br bufio.BufioReader) error {
+func (z *Reader) Reset(br ringbuf.RingBufferReader) error {
 	z.br = br
 
 	if br != nil {
