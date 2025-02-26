@@ -22,8 +22,8 @@ type frames struct {
 	frameStore [2]runtime.Frame
 }
 
-func appendStackTrace(dst []byte, skip int) ([]byte, uint8) {
-	var callers [16]uintptr
+func appendStackTrace(dst []byte, skip int) []byte {
+	var callers [15]uintptr
 	n := runtime.Callers(skip, callers[:])
 	f := frames{callers: callers[:n]}
 	f.frames = f.frameStore[:0]
@@ -34,12 +34,14 @@ func appendStackTrace(dst []byte, skip int) ([]byte, uint8) {
 		more  = true
 	)
 
-	var x uint8
+	var i uint8
+
+	dst = msgpack.AppendString(dst, "stackTrace")
+	dst = msgpack.AppendArrayHeader(dst, 0)
+	x := len(dst) - 1
 
 	for more {
 		frame, more = frames.Next()
-
-		dst = msgpack.AppendString(dst, "stackTrace")
 		dst = msgpack.AppendStringMax255(dst, func(dst []byte) []byte {
 			dst = append(dst, frame.File...)
 			dst = append(dst, ':')
@@ -47,8 +49,10 @@ func appendStackTrace(dst []byte, skip int) ([]byte, uint8) {
 			return dst
 		})
 
-		x++
+		i++
 	}
 
-	return dst, x
+	dst[x] = i
+
+	return dst
 }

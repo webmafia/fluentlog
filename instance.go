@@ -187,9 +187,8 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 	}
 
 	if sev <= inst.opt.StackTraceThreshold {
-		var n uint8
-		b.B, n = appendStackTrace(b.B, skipStackTrace)
-		b.B[x] += n
+		b.B = appendStackTrace(b.B, skipStackTrace)
+		b.B[x]++
 	}
 
 	inst.queueMessage(b)
