@@ -88,6 +88,8 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, c
 		}
 
 		go func() {
+			defer conn.Close()
+
 			iter := s.iterPool.Get(conn)
 			defer s.iterPool.Put(iter)
 
@@ -97,13 +99,13 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, c
 			state := s.bufPool.Get()
 			defer s.bufPool.Put(state)
 
-			sc := ServerConn{
-				serv:  s,
-				conn:  conn,
-				r:     iter,
-				w:     msgpack.NewWriter(conn, wBuf),
-				state: state,
-			}
+			sc := newServerConn(
+				s,
+				conn,
+				iter,
+				wBuf,
+				state,
+			)
 
 			if err := sc.handle(ctx, handler); err != nil {
 				s.opt.HandleError(err)

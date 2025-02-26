@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"net"
-	"strings"
 	"time"
+	_ "unsafe"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
@@ -19,11 +18,20 @@ import (
 
 type ServerConn struct {
 	serv      *Server
-	conn      net.Conn
 	r         *msgpack.Iterator
 	w         msgpack.Writer
 	state     *buffer.Buffer
 	user, tag string
+}
+
+//go:linkname newServerConn forward.newServerConn
+func newServerConn(s *Server, conn io.Writer, iter *msgpack.Iterator, wBuf, state *buffer.Buffer) ServerConn {
+	return ServerConn{
+		serv:  s,
+		r:     iter,
+		w:     msgpack.NewWriter(conn, wBuf),
+		state: state,
+	}
 }
 
 func (s *ServerConn) Username() string {
@@ -38,14 +46,7 @@ func (s *ServerConn) TotalRead() int {
 	return s.r.TotalRead()
 }
 
-func (s *ServerConn) String() string {
-	_, port, _ := strings.Cut(s.conn.RemoteAddr().String(), ":")
-	return port
-}
-
 func (s *ServerConn) handle(ctx context.Context, handler func(ctx context.Context, conn *ServerConn) error) (err error) {
-	defer s.conn.Close()
-
 	if err = s.handshakePhase(ctx); err != nil {
 		return
 	}

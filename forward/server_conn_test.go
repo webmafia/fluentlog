@@ -86,7 +86,6 @@ func BenchmarkEntries(b *testing.B) {
 	// Create our ServerConn.
 	sc := ServerConn{
 		serv:  s,
-		conn:  conn,
 		r:     iter,
 		w:     msgpack.NewWriter(conn, wBuf),
 		state: state,
@@ -135,7 +134,6 @@ func BenchmarkEntriesOverTCP(b *testing.B) {
 	// Create our ServerConn.
 	sc := ServerConn{
 		serv:  s,
-		conn:  conn,
 		r:     iter,
 		w:     msgpack.NewWriter(conn, wBuf),
 		state: state,
