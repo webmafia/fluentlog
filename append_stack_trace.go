@@ -52,7 +52,7 @@ func appendStackTrace(dst []byte, skip int) []byte {
 		i++
 	}
 
-	dst[x] = i
+	dst[x] = 0x90 | i
 
 	return dst
 }
