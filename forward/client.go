@@ -33,7 +33,7 @@ type ClientOptions struct {
 func NewClient(addr string, opt ClientOptions) *Client {
 	return &Client{
 		addr: addr,
-		r:    msgpack.NewIterator(nil, 4096),
+		r:    msgpack.NewIterator(nil),
 		w:    msgpack.NewWriter(nil, buffer.NewBuffer(4096)),
 		opt:  opt,
 	}

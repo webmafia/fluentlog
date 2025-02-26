@@ -21,7 +21,7 @@ type Iterator struct {
 	typ    types.Type // Token type
 }
 
-func NewIterator(r io.Reader, maxBufSize ...int) Iterator {
+func NewIterator(r io.Reader) Iterator {
 	return Iterator{
 		r: ringbuf.NewReader(r),
 	}
@@ -31,11 +31,11 @@ func (iter *Iterator) Error() error {
 	return iter.err
 }
 
-func (iter *Iterator) Reset(r io.Reader, maxBufSize ...int) {
+func (iter *Iterator) Reset(r io.Reader) {
 	iter.r.Reset(r)
 }
 
-func (iter *Iterator) ResetBytes(b []byte, maxBufSize ...int) {
+func (iter *Iterator) ResetBytes(b []byte) {
 	iter.r.ResetBytes(b)
 }
 
@@ -196,11 +196,9 @@ func (iter *Iterator) Skip() {
 	}
 }
 
-// Get total bytes read
+// Get total bytes read from underlying io.Reader since last reset.
 func (r *Iterator) TotalRead() int {
-	// TODO
-	return 0
-	// return r.r.TotalRead()
+	return r.r.TotalRead()
 }
 
 func (iter *Iterator) reportError(op string, err any) bool {

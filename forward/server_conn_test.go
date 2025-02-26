@@ -9,6 +9,28 @@ import (
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
+func persistentTCPServer(t testing.TB, data []byte) net.Listener {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen on TCP: %v", err)
+	}
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		// Continuously write data.
+		for {
+			_, err := conn.Write(data)
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return ln
+}
+
 // --- Dummy implementations to satisfy dependencies ---
 
 // dummyConn implements net.Conn for our benchmark.
@@ -49,14 +71,59 @@ func createPayload() (b []byte) {
 
 func BenchmarkEntries(b *testing.B) {
 	validPayload := createPayload()
-
-	// Create an iterator from the valid payload.
-	// We assume msgpack.NewIterator takes a byte slice.
-	// it := msgpack.NewIterator(nil)
-	// it.ResetBytes(validPayload)
+	b.SetBytes(int64(len(validPayload)))
 
 	// Create a dummy connection.
 	conn := &dummyConn{}
+
+	s := NewServer(ServerOptions{})
+
+	iter := s.iterPool.Get(conn)
+	iter.ResetBytes(validPayload)
+	wBuf := s.bufPool.Get()
+	state := s.bufPool.Get()
+
+	// Create our ServerConn.
+	sc := ServerConn{
+		serv:  s,
+		conn:  conn,
+		r:     iter,
+		w:     msgpack.NewWriter(conn, wBuf),
+		state: state,
+	}
+
+	// Report allocations.
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, rec := range sc.Entries() {
+			rec.Skip()
+		}
+
+		// Reset the iterator for the next iteration.
+		iter.ResetBytes(validPayload)
+		wBuf.Reset()
+		state.Reset()
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkEntriesOverTCP(b *testing.B) {
+	validPayload := createPayload()
+	b.SetBytes(int64(len(validPayload)))
+
+	// Start the persistent TCP server.
+	ln := persistentTCPServer(b, validPayload)
+	defer ln.Close()
+
+	// Dial the connection once, outside the benchmark loop.
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		b.Fatalf("Dial error: %v", err)
+	}
+	defer conn.Close()
 
 	s := NewServer(ServerOptions{})
 

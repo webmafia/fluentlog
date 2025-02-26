@@ -1,4 +1,4 @@
-module github.com/webmafia/fluentlog/benchmark
+module github.com/webmafia/fluentlog/benchmark/loggers
 
 go 1.23.5
 

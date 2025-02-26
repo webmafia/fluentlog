@@ -103,7 +103,6 @@ func Example_iterateComplexMessage() {
 func FuzzVaryingIterator(f *testing.F) {
 	type testCase struct {
 		data           []byte
-		maxBufSize     uint16
 		copyN          int16
 		release        bool
 		forceRelease   bool
@@ -114,7 +113,6 @@ func FuzzVaryingIterator(f *testing.F) {
 	cases := []testCase{
 		{
 			data:           buildComplexMessage(true),
-			maxBufSize:     4096,
 			copyN:          math.MaxInt16,
 			release:        false,
 			forceRelease:   false,
@@ -124,7 +122,7 @@ func FuzzVaryingIterator(f *testing.F) {
 	}
 
 	for _, c := range cases {
-		f.Add(c.data, c.maxBufSize, c.copyN, c.release, c.forceRelease, c.skipExplicitly, c.skipImplicitly)
+		f.Add(c.data, c.copyN, c.release, c.forceRelease, c.skipExplicitly, c.skipImplicitly)
 	}
 
 	pool := sync.Pool{
@@ -134,11 +132,11 @@ func FuzzVaryingIterator(f *testing.F) {
 		},
 	}
 
-	f.Fuzz(func(t *testing.T, msg []byte, maxBufSize uint16, copyN int16, release bool, forceRelease bool, skipExplicitly bool, skipImplicitly bool) {
+	f.Fuzz(func(t *testing.T, msg []byte, copyN int16, release bool, forceRelease bool, skipExplicitly bool, skipImplicitly bool) {
 		iter := pool.Get().(*Iterator)
 		defer pool.Put(iter)
 
-		iter.ResetBytes(msg, int(maxBufSize))
+		iter.ResetBytes(msg)
 
 		for iter.Next() {
 			if skipExplicitly {
