@@ -252,3 +252,7 @@ func (iter *Iterator) Any() any {
 		return nil
 	}
 }
+
+func (iter *Iterator) DebugDump(w io.Writer) {
+	iter.r.DebugDump(w)
+}
