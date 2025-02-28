@@ -3,8 +3,6 @@ package msgpack
 import (
 	"io"
 	"sync"
-
-	"github.com/webmafia/fast/ringbuf"
 )
 
 // memory waste.
@@ -20,7 +18,9 @@ func (p *IterPool) Get(r io.Reader) (iter *Iterator) {
 		return
 	}
 
-	return &Iterator{r: ringbuf.NewReader(r)}
+	it := NewIterator(r)
+
+	return &it
 }
 
 func (p *IterPool) Put(iter *Iterator) {

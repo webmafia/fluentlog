@@ -86,6 +86,7 @@ func (s *ServerConn) handshakePhase(ctx context.Context) (err error) {
 	}
 
 	s.user = s.stateString(cred.Username)
+	s.r.Flush()
 
 	return
 }
@@ -115,6 +116,8 @@ func (s *ServerConn) transportPhase(yield func(time.Time, *msgpack.Iterator) boo
 	more := true
 
 	for more {
+		s.r.Flush()
+
 		// 0) Array of 2-4 items
 		if err = s.r.NextExpectedType(types.Array); err != nil {
 			return
@@ -265,8 +268,6 @@ func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) 
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
 func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *ringbuf.LimitedReader) (more bool, err error) {
-	// r, err := gzip.NewReader(br)
-	// r, err := gzip.NewReader(br)
 	r, err := s.serv.gzipPool.Get(br)
 
 	if err != nil {
@@ -292,6 +293,7 @@ func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.
 //	  {"message": "bar"}        // 2. record
 //	]
 func (s *ServerConn) iterateEntry(yield func(time.Time, *msgpack.Iterator) bool, iter *msgpack.Iterator) (more bool, err error) {
+	iter.Flush()
 
 	// 0) Array of 2 items
 	if err = iter.NextExpectedType(types.Array); err != nil {

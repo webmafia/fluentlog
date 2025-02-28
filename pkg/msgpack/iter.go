@@ -22,8 +22,11 @@ type Iterator struct {
 }
 
 func NewIterator(r io.Reader) Iterator {
+	rd := ringbuf.NewReader(r)
+	rd.SetManualFlush(true)
+
 	return Iterator{
-		r: ringbuf.NewReader(r),
+		r: rd,
 	}
 }
 
@@ -104,6 +107,10 @@ func (iter *Iterator) Len() int {
 
 func (iter *Iterator) Items() int {
 	return iter.items
+}
+
+func (iter *Iterator) Flush() {
+	iter.r.Flush()
 }
 
 // Keeping returned bytes after next call to `Next()` is not safe unless
