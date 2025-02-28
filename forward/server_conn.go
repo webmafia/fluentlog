@@ -250,6 +250,9 @@ func (s *ServerConn) binary(yield func(time.Time, *msgpack.Iterator) bool) (more
 //	  {"chunk": "<<UniqueId>>"}     // 3. options (optional)
 //	]
 func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *ringbuf.LimitedReader) (more bool, err error) {
+	br.SetManualFlush(false)
+	defer br.SetManualFlush(true)
+
 	iter := s.serv.iterPool.Get(br)
 	defer s.serv.iterPool.Put(iter)
 
@@ -268,6 +271,9 @@ func (s *ServerConn) packedForwardMode(yield func(time.Time, *msgpack.Iterator) 
 //	  {"compressed": "gzip", "chunk": "<<UniqueId>>"} // 3. options with "compressed" (required)
 //	]
 func (s *ServerConn) compressedPackedForwardMode(yield func(time.Time, *msgpack.Iterator) bool, br *ringbuf.LimitedReader) (more bool, err error) {
+	br.SetManualFlush(false)
+	defer br.SetManualFlush(true)
+
 	r, err := s.serv.gzipPool.Get(br)
 
 	if err != nil {

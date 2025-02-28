@@ -21,8 +21,8 @@ func main() {
 }
 
 func startClient(ctx context.Context) (err error) {
-	// addr := "localhost:24224"
-	addr := "localhost:24284"
+	addr := "localhost:24224"
+	// addr := "localhost:24284"
 
 	cli := forward.NewClient(addr, forward.ClientOptions{
 		Auth: forward.StaticAuthClient(forward.Credentials{
