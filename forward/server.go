@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
+	"time"
 
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/gzip"
@@ -25,6 +26,7 @@ type ServerOptions struct {
 	HandleError  func(err error)
 	Auth         AuthServer
 	PasswordAuth bool
+	ReadTimeout  time.Duration
 }
 
 func SharedKey(sharedKey []byte) func(clientHostname string) (sharedKey []byte, err error) {

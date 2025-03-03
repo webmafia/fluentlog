@@ -30,6 +30,10 @@ func NewIterator(r io.Reader) Iterator {
 	}
 }
 
+func (iter *Iterator) RingReader() *ringbuf.Reader {
+	return iter.r
+}
+
 func (iter *Iterator) Error() error {
 	return iter.err
 }
@@ -109,8 +113,16 @@ func (iter *Iterator) Items() int {
 	return iter.items
 }
 
+func (iter *Iterator) SetManualFlush(v bool) {
+	iter.r.SetManualFlush(v)
+}
+
 func (iter *Iterator) Flush() {
 	iter.r.Flush()
+}
+
+func (iter *Iterator) Rewind() {
+	iter.r.Rewind()
 }
 
 // Keeping returned bytes after next call to `Next()` is not safe unless
