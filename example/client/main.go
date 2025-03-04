@@ -73,14 +73,17 @@ func startClient(ctx context.Context) (err error) {
 
 	// sub.Error("woah, something happaned")
 
-	for i := range 1_000_000 {
-		sub.Infof("hello %d", i+1)
-		// sub.Info("hello world",
-		// 	"count", i+1,
-		// 	"foo", "bar",
-		// 	fluentlog.StackTrace(),
-		// )
+	for i := range 100_000 {
+		sub.Infof("batch a: hello %d", i+1)
 	}
+
+	// time.Sleep(2 * time.Second)
+
+	// for i := range 10 {
+	// 	sub.Infof("batch a: hello %d", i+1)
+	// }
+
+	// time.Sleep(10 * time.Second)
 
 	// if err = cli.Connect(ctx); err != nil {
 	// 	return

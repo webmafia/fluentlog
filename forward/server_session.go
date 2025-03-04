@@ -1,6 +1,8 @@
 package forward
 
 import (
+	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net"
@@ -60,11 +62,50 @@ func newServerSession(s *Server, conn net.Conn) ServerSession {
 	}
 }
 
-func (ss *ServerSession) User() string {
+func (ss *ServerSession) authenticate(ctx context.Context) (err error) {
+	var nonceAuth [48]byte
+
+	if _, err = rand.Read(nonceAuth[:]); err != nil {
+		return
+	}
+
+	nonce, auth := fast.BytesToString(nonceAuth[:24]), fast.BytesToString(nonceAuth[24:])
+
+	if !ss.serv.opt.PasswordAuth {
+		auth = ""
+	}
+
+	if err = ss.writeHelo(nonce, auth); err != nil {
+		return
+	}
+
+	salt, cred, err := ss.readPing(ctx, nonce, auth)
+
+	if err != nil {
+		ss.writePong(nonce, salt, "", false, err.Error())
+		return
+	}
+
+	if err = ss.writePong(salt, nonce, cred.SharedKey, true, ""); err != nil {
+		return
+	}
+
+	ss.user = append(ss.user[:0], cred.Username...)
+
+	return
+}
+
+func (ss *ServerSession) TotalRead() int {
+	return ss.iter.TotalRead()
+}
+
+func (ss *ServerSession) Username() string {
 	return fast.BytesToString(ss.user)
 }
 
 func (ss *ServerSession) Next(e *Entry) (err error) {
+	ss.prepareForMessage()
+
 	if !ss.iter.Next() {
 		if err := ss.iter.Error(); err != io.EOF || ss.mode <= ForwardMode {
 			return err
@@ -75,10 +116,6 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 		if !ss.iter.Next() {
 			return ss.iter.Error()
 		}
-	}
-
-	if ss.mode != MessageMode {
-		goto forwardMode
 	}
 
 	// Options from previous call
@@ -92,7 +129,11 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 		}
 	}
 
-	ss.prepareForMessage()
+	if ss.mode != MessageMode {
+		goto forwardMode
+	}
+
+	// ss.prepareForMessage()
 
 	// 0) Array of 2-4 items
 	if ss.iter.Type() != types.Array {
@@ -161,14 +202,19 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 
 	}
 
+	if !ss.iter.Next() {
+		return ss.iter.Error()
+	}
+
 forwardMode:
 
-	ss.prepareForMessage()
+	// ss.prepareForMessage()
 
 	// 0) Array of 2 items
-	if err = ss.iter.NextExpectedType(types.Array); err != nil {
-		return
+	if ss.iter.Type() != types.Array {
+		return ErrInvalidEntry
 	}
+
 	if items := ss.iter.Items(); items != 2 {
 		return ErrInvalidEntry
 	}
@@ -206,11 +252,18 @@ func (ss *ServerSession) Rewind() {
 
 func (ss *ServerSession) prepareForMessage() {
 	ss.iter.Flush()
+	ss.conn.SetReadDeadline(time.Now().Add(time.Second))
 
-	if dur := ss.serv.opt.ReadTimeout; dur > 0 {
-		dur += time.Since(ss.timeConn)
-		ss.conn.SetReadDeadline(ss.timeConn.Add(dur))
-	}
+	// if dur := ss.serv.opt.ReadTimeout; dur > 0 {
+	// 	deadline := time.Now().Add(dur)
+	// 	// dur += time.Since(ss.timeConn)
+	// 	// deadline := ss.timeConn.Add(dur)
+	// 	// log.Println("duration:", dur)
+	// 	// log.Println("read deadline set to:", deadline)
+	// 	err := ss.conn.SetReadDeadline(deadline)
+
+	// 	_ = err
+	// }
 }
 
 func (ss *ServerSession) resumeMessageMode() {

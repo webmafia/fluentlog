@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/internal/gzip"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
@@ -52,7 +53,7 @@ func NewServer(opt ServerOptions) *Server {
 	}
 }
 
-func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, conn *ServerConn) error) (err error) {
+func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, ss *ServerSession) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -90,26 +91,18 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, c
 		}
 
 		go func() {
-			defer conn.Close()
+			ss := newServerSession(s, conn)
+			defer ss.Close()
 
-			iter := s.iterPool.Get(conn)
-			defer s.iterPool.Put(iter)
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
-			wBuf := s.bufPool.Get()
-			defer s.bufPool.Put(wBuf)
+			if err := ss.authenticate(ctx); err != nil {
+				s.opt.HandleError(err)
+				return
+			}
 
-			state := s.bufPool.Get()
-			defer s.bufPool.Put(state)
-
-			sc := newServerConn(
-				s,
-				conn,
-				iter,
-				wBuf,
-				state,
-			)
-
-			if err := sc.handle(ctx, handler); err != nil {
+			if err := handler(ctx, fast.NoescapeVal(&ss)); err != nil {
 				s.opt.HandleError(err)
 			}
 		}()

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/webmafia/fluentlog/forward"
 )
@@ -28,13 +30,32 @@ func startServer(ctx context.Context) (err error) {
 			Password:  "bar",
 			SharedKey: "secret",
 		}),
+		HandleError: func(err error) {
+			log.Println("client error:", err)
+		},
+		ReadTimeout: 1 * time.Second,
 	})
 
-	return serv.Listen(ctx, func(ctx context.Context, c *forward.ServerConn) error {
-		for ts, rec := range c.Entries() {
-			numFields := rec.Items()
-			log.Println(c.Username(), c.Tag(), ts)
+	return serv.Listen(ctx, func(ctx context.Context, ss *forward.ServerSession) (err error) {
+		var e forward.Entry
+
+		log.Println("connected")
+		defer log.Println("disconnected")
+
+		for {
+			if err = ss.Next(&e); err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					log.Println("timed out:", err)
+					continue
+				}
+
+				return
+			}
+
+			numFields := e.Record.Items()
+			log.Println(ss.Username(), e.Tag, e.Timestamp)
 			log.Println("received entry of", numFields, "fields")
+			rec := e.Record
 
 			for range numFields {
 				if !rec.Next() {
@@ -57,6 +78,6 @@ func startServer(ctx context.Context) (err error) {
 			}
 		}
 
-		return nil
+		return
 	})
 }

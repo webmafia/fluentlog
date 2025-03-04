@@ -15,21 +15,22 @@ const (
 	PONG = "PONG"
 )
 
-func (s *ServerConn) writeHelo(nonce, auth string) error {
-	s.w.WriteArrayHeader(2)
-	s.w.WriteString(HELO)
-	s.w.WriteMapHeader(3)
+func (ss *ServerSession) writeHelo(nonce, auth string) (err error) {
+	ss.write.WriteArrayHeader(2)
+	ss.write.WriteString(HELO)
+	ss.write.WriteMapHeader(3)
 
-	s.w.WriteString("nonce")
-	s.w.WriteString(nonce)
+	ss.write.WriteString("nonce")
+	ss.write.WriteString(nonce)
 
-	s.w.WriteString("auth")
-	s.w.WriteString(auth)
+	ss.write.WriteString("auth")
+	ss.write.WriteString(auth)
 
-	s.w.WriteString("keepalive")
-	s.w.WriteBool(true)
+	ss.write.WriteString("keepalive")
+	ss.write.WriteBool(true)
 
-	return s.w.Flush()
+	_, err = ss.write.WriteTo(ss.conn)
+	return
 }
 
 func (c *Client) readHelo() (nonce, auth string, err error) {
@@ -109,42 +110,42 @@ func (c *Client) writePing(cred *Credentials, salt, nonce, auth string) (err err
 	return c.w.Flush()
 }
 
-func (s *ServerConn) readPing(ctx context.Context, nonce, auth string) (salt string, cred Credentials, err error) {
+func (ss *ServerSession) readPing(ctx context.Context, nonce, auth string) (salt string, cred Credentials, err error) {
 	var clientHostname string
 
 	// 0) Array of 6 items
-	if err = s.r.NextExpectedType(types.Array); err != nil {
+	if err = ss.iter.NextExpectedType(types.Array); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	if s.r.Items() != 6 {
+	if ss.iter.Items() != 6 {
 		err = ErrInvalidPing
 		return
 	}
 
 	// 1) Type
-	if err = s.r.NextExpectedType(types.Str); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	if typ := s.r.Str(); typ != PING {
+	if typ := ss.iter.Str(); typ != PING {
 		err = fmt.Errorf("%w: expected type '%s', got '%s'", ErrInvalidPing, PING, typ)
 		return
 	}
 
 	// 2) Client hostname
-	if err = s.r.NextExpectedType(types.Str); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	clientHostname = s.r.Str()
+	clientHostname = ss.iter.Str()
 
 	// 3) Shared key salt
-	if err = s.r.NextExpectedType(types.Str, types.Bin); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str, types.Bin); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	salt = s.r.Str()
+	salt = ss.iter.Str()
 
 	var (
 		hexdigest []byte
@@ -153,27 +154,27 @@ func (s *ServerConn) readPing(ctx context.Context, nonce, auth string) (salt str
 	)
 
 	// 4) Shared key hexdigest
-	if err = s.r.NextExpectedType(types.Str); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	hexdigest = s.r.Bin()
+	hexdigest = ss.iter.Bin()
 
 	// 5) Username
-	if err = s.r.NextExpectedType(types.Str); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	username = s.r.Str()
+	username = ss.iter.Str()
 
 	// 5) Password
-	if err = s.r.NextExpectedType(types.Str); err != nil {
+	if err = ss.iter.NextExpectedType(types.Str); err != nil {
 		err = errors.Join(ErrInvalidPing, err)
 		return
 	}
-	password = s.r.Bin()
+	password = ss.iter.Bin()
 
-	if cred, err = s.serv.opt.Auth(ctx, username); err != nil {
+	if cred, err = ss.serv.opt.Auth(ctx, username); err != nil {
 		err = errors.Join(ErrFailedAuth, err)
 		return
 	}
@@ -195,14 +196,16 @@ func (s *ServerConn) readPing(ctx context.Context, nonce, auth string) (salt str
 	return
 }
 
-func (s *ServerConn) writePong(salt string, nonce string, sharedKey string, authResult bool, reason string) (err error) {
-	s.w.WriteArrayHeader(5)
-	s.w.WriteString(PONG)
-	s.w.WriteBool(authResult)
-	s.w.WriteString(reason)
-	s.w.WriteString(s.serv.opt.Hostname)
-	s.w.WriteStringMax255(sha512Hex(salt, s.serv.opt.Hostname, nonce, sharedKey))
-	return s.w.Flush()
+func (ss *ServerSession) writePong(salt string, nonce string, sharedKey string, authResult bool, reason string) (err error) {
+	ss.write.WriteArrayHeader(5)
+	ss.write.WriteString(PONG)
+	ss.write.WriteBool(authResult)
+	ss.write.WriteString(reason)
+	ss.write.WriteString(ss.serv.opt.Hostname)
+	ss.write.WriteStringMax255(sha512Hex(salt, ss.serv.opt.Hostname, nonce, sharedKey))
+
+	_, err = ss.write.WriteTo(ss.conn)
+	return
 }
 
 func (c *Client) readPong(salt, nonce, sharedKey string) (err error) {
