@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"runtime"
 	"time"
 
 	_ "unsafe"
@@ -108,24 +110,26 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 
 	if !ss.iter.Next() {
 		if err := ss.iter.Error(); err != io.EOF || ss.mode <= ForwardMode {
-			return err
+			return ss.error(err)
 		}
 
 		ss.resumeMessageMode()
 
 		if !ss.iter.Next() {
-			return ss.iter.Error()
+			return ss.error(ss.iter.Error())
 		}
 	}
 
 	// Options from previous call
 	if ss.iter.Type() == types.Map {
 		if err = ss.writeAck(); err != nil {
-			return
+			return ss.error(err)
 		}
 
+		ss.resumeMessageMode()
+
 		if !ss.iter.Next() {
-			return ss.iter.Error()
+			return ss.error(ss.iter.Error())
 		}
 	}
 
@@ -137,31 +141,31 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 
 	// 0) Array of 2-4 items
 	if ss.iter.Type() != types.Array {
-		return ErrInvalidEntry
+		return ss.error(ErrInvalidEntry)
 	}
 
 	// Abort early if invalid data
 	if evLen := ss.iter.Items(); evLen < 2 || evLen > 4 {
-		return fmt.Errorf("unexpected array length: %d", evLen)
+		return ss.error(fmt.Errorf("unexpected array length: %d", evLen))
 	}
 
 	// 1) Tag
 	if err = ss.iter.NextExpectedType(types.Str); err != nil {
-		return
+		return ss.error(err)
 	}
 
 	if ss.iter.Len() < minTagLen {
-		return fmt.Errorf("too short tag (%d chars), must be min %d chars", ss.iter.Len(), minTagLen)
+		return ss.error(fmt.Errorf("too short tag (%d chars), must be min %d chars", ss.iter.Len(), minTagLen))
 	}
 
 	if ss.iter.Len() > maxTagLen {
-		return fmt.Errorf("too long tag (%d chars), must be max %d chars", ss.iter.Len(), maxTagLen)
+		return ss.error(fmt.Errorf("too long tag (%d chars), must be max %d chars", ss.iter.Len(), maxTagLen))
 	}
 	ss.tag = append(ss.tag[:0], ss.iter.Bin()...)
 
 	// 2) Time or Entries (Array / Bin / Str)
 	if !ss.iter.Next() {
-		return ss.iter.Error()
+		return ss.error(ss.iter.Error())
 	}
 
 	switch ss.iter.Type() {
@@ -178,7 +182,7 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 		isGzip, err := isGzip(limitR)
 
 		if err != nil {
-			return err
+			return ss.error(err)
 		}
 
 		ss.iter.SetManualFlush(false)
@@ -187,7 +191,7 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 			gzip, err := ss.serv.gzipPool.Get(limitR)
 
 			if err != nil {
-				return err
+				return ss.error(err)
 			}
 
 			ss.mode = CompressedPackedForwardMode
@@ -198,12 +202,12 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 		}
 
 	default:
-		return ErrInvalidEntry
+		return ss.error(ErrInvalidEntry)
 
 	}
 
 	if !ss.iter.Next() {
-		return ss.iter.Error()
+		return ss.error(ss.iter.Error())
 	}
 
 forwardMode:
@@ -212,16 +216,20 @@ forwardMode:
 
 	// 0) Array of 2 items
 	if ss.iter.Type() != types.Array {
-		return ErrInvalidEntry
+		return ss.error(ErrInvalidEntry)
 	}
 
 	if items := ss.iter.Items(); items != 2 {
-		return ErrInvalidEntry
+		f, _ := os.Create("debug.txt")
+		ss.iter.DebugDump(f)
+		f.Close()
+
+		return ss.error(fmt.Errorf("unexpected array length: expected %d, got %d", 2, items))
 	}
 
 	// 1) Timestamp
 	if err = ss.iter.NextExpectedType(types.Ext, types.Int, types.Uint); err != nil {
-		return
+		return ss.error(err)
 	}
 
 entryRecord:
@@ -231,7 +239,7 @@ entryRecord:
 
 	// 2) Record
 	if err = ss.iter.NextExpectedType(types.Map); err != nil {
-		return
+		return ss.error(err)
 	}
 
 	e.Record = ss.iter
@@ -331,4 +339,14 @@ func isGzip(r *ringbuf.LimitedReader) (ok bool, err error) {
 		magicNumbers[2] == 8)
 
 	return
+}
+
+func (ss *ServerSession) error(e any) (err error) {
+	_, _, line, _ := runtime.Caller(1)
+
+	if origErr, ok := e.(error); ok {
+		return fmt.Errorf("line %3d: %w", line, origErr)
+	}
+
+	return fmt.Errorf("line %3d: %v", line, e)
 }
