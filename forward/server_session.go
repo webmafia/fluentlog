@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"runtime"
@@ -32,6 +33,7 @@ type Entry struct {
 
 type EventMode uint8
 
+// The Fluent Forwawrd protocol has four different event modes.
 const (
 	MessageMode EventMode = iota
 	ForwardMode
@@ -47,6 +49,7 @@ type ServerSession struct {
 	write     msgpack.Buffer
 	user, tag []byte
 	timeConn  time.Time
+	curItems  int32
 	mode      EventMode
 }
 
@@ -133,12 +136,22 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 		}
 	}
 
+	if ss.mode == ForwardMode {
+		if ss.curItems <= 0 {
+			log.Println("ss.curItems reached zero")
+			ss.resumeMessageMode()
+		} else {
+			goto forwardMode
+		}
+	}
+
 	if ss.mode != MessageMode {
-		goto forwardMode
+		goto packedForwardMode
 	}
 
 	// ss.prepareForMessage()
 
+messageMode:
 	// 0) Array of 2-4 items
 	if ss.iter.Type() != types.Array {
 		return ss.error(ErrInvalidEntry)
@@ -176,6 +189,7 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 
 	case types.Array:
 		ss.mode = ForwardMode
+		ss.curItems = int32(ss.iter.Items())
 
 	case types.Bin:
 		limitR := ss.iter.Reader()
@@ -211,18 +225,27 @@ func (ss *ServerSession) Next(e *Entry) (err error) {
 	}
 
 forwardMode:
+	ss.curItems--
+
+packedForwardMode:
 
 	// ss.prepareForMessage()
 
 	// 0) Array of 2 items
 	if ss.iter.Type() != types.Array {
-		return ss.error(ErrInvalidEntry)
-	}
-
-	if items := ss.iter.Items(); items != 2 {
 		f, _ := os.Create("debug.txt")
 		ss.iter.DebugDump(f)
 		f.Close()
+
+		log.Println("ss.curItems", ss.curItems)
+		return ss.error(fmt.Errorf("%w: expected %s, got %s", ErrInvalidEntry, types.Array, ss.iter.Type()))
+	}
+
+	if items := ss.iter.Items(); items != 2 {
+		if items > 2 {
+			ss.mode = MessageMode
+			goto messageMode
+		}
 
 		return ss.error(fmt.Errorf("unexpected array length: expected %d, got %d", 2, items))
 	}
