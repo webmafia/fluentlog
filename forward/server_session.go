@@ -56,9 +56,10 @@ type ServerSession struct {
 	write    msgpack.Buffer
 	user     []byte
 	timeConn time.Time
-	mode     EventMode
 	next     func(iter *msgpack.Iterator, e *Entry) error
 	modes    modes
+	mode     EventMode
+	id       uint64
 }
 
 //go:linkname newServerSession forward.newServerSession
@@ -118,6 +119,18 @@ func (ss *ServerSession) Buffered() int {
 
 func (ss *ServerSession) Username() string {
 	return fast.BytesToString(ss.user)
+}
+
+func (ss *ServerSession) ID() uint64 {
+	return ss.id
+}
+
+func (ss *ServerSession) Log(str string, args ...any) {
+	if len(args) > 0 {
+		str = fmt.Sprintf(str, args...)
+	}
+
+	log.Printf("%04d: %s", ss.id, str)
 }
 
 func (ss *ServerSession) initTransportPhase() {

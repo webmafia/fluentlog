@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/webmafia/fast"
@@ -19,6 +20,7 @@ type Server struct {
 	bufPool  buffer.Pool
 	iterPool msgpack.IterPool
 	gzipPool gzip.Pool
+	sessId   uint64
 }
 
 type ServerOptions struct {
@@ -94,6 +96,8 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, s
 		go func() {
 			ss := newServerSession(s, conn)
 			defer ss.Close()
+
+			ss.id = atomic.AddUint64(&s.sessId, 1)
 
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
