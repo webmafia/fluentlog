@@ -125,6 +125,10 @@ func (iter *Iterator) Rewind() {
 	iter.r.Rewind()
 }
 
+func (iter *Iterator) Buffered() int {
+	return iter.r.Buffered()
+}
+
 // Keeping returned bytes after next call to `Next()` is not safe unless
 // the buffer is locked with `Lock`.
 func (iter *Iterator) raw() (b []byte, ok bool) {

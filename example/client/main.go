@@ -73,7 +73,7 @@ func startClient(ctx context.Context) (err error) {
 
 	// sub.Error("woah, something happaned")
 
-	for i := range 1_000_000 {
+	for i := range 600_000 {
 		sub.Infof("batch a: hello %d", i+1)
 	}
 

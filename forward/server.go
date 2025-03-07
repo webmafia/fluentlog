@@ -3,6 +3,7 @@ package forward
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -102,7 +103,9 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, s
 				return
 			}
 
-			if err := handler(ctx, fast.NoescapeVal(&ss)); err != nil {
+			ss.initTransportPhase()
+
+			if err := handler(ctx, fast.NoescapeVal(&ss)); err != nil && err != io.EOF {
 				s.opt.HandleError(err)
 			}
 		}()
