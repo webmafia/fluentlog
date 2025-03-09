@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/webmafia/fluentlog/forward/transport"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
@@ -102,7 +103,7 @@ func BenchmarkServerSessionNext(b *testing.B) {
 
 	// 4) We'll read b.N sub-events, ignoring them but measuring parse overhead
 	for i := 0; i < b.N; i++ {
-		var e Entry
+		var e transport.Entry
 		if err := ss.Next(&e); err != nil {
 			b.Fatalf("Next error at i=%d: %v", i, err)
 		}

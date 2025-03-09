@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/webmafia/fluentlog/forward"
+	"github.com/webmafia/fluentlog/forward/transport"
 )
 
 func main() {
@@ -37,7 +38,7 @@ func startServer(ctx context.Context) (err error) {
 	})
 
 	return serv.Listen(ctx, func(ctx context.Context, ss *forward.ServerSession) (err error) {
-		var e forward.Entry
+		var e transport.Entry
 
 		log.Println("connected")
 		defer log.Println("disconnected")
