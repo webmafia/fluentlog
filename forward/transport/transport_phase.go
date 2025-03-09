@@ -105,3 +105,7 @@ func (t *TransportPhase) errorNoEof(op string, err any) error {
 
 	return fmt.Errorf("%s, %s: %v", t.mode, op, err)
 }
+
+func (t *TransportPhase) Rewind(iter *msgpack.Iterator) {
+	t.mode.Rewind(iter)
+}

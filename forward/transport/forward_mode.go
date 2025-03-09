@@ -17,6 +17,11 @@ type ForwardMode struct {
 	hasOptions bool
 }
 
+// Rewind implements Mode.
+func (m *ForwardMode) Rewind(iter *msgpack.Iterator) {
+	iter.Rewind()
+}
+
 // String implements Mode.
 func (m *ForwardMode) String() string {
 	return "ForwardMode"

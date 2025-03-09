@@ -89,6 +89,10 @@ func (ss *ServerSession) ID() uint64 {
 	return ss.id
 }
 
+func (ss *ServerSession) TimeConnected() time.Time {
+	return ss.timeConn
+}
+
 func (ss *ServerSession) Log(str string, args ...any) {
 	if len(args) > 0 {
 		str = fmt.Sprintf(str, args...)
@@ -109,7 +113,11 @@ func (ss *ServerSession) initTransportPhase() {
 }
 
 func (ss *ServerSession) Next(e *transport.Entry) (err error) {
-	ss.conn.SetReadDeadline(time.Now().Add(time.Second))
+	if ss.serv.opt.ReadTimeout > 0 {
+		dur := time.Since(ss.timeConn)
+		dur += ss.serv.opt.ReadTimeout
+		ss.conn.SetReadDeadline(ss.timeConn.Add(dur))
+	}
 
 	return ss.trans.Next(ss.iter, e)
 }
@@ -121,5 +129,5 @@ func (ss *ServerSession) Close() error {
 }
 
 func (ss *ServerSession) Rewind() {
-	ss.iter.Rewind()
+	ss.trans.Rewind(ss.iter)
 }

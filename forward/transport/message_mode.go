@@ -18,6 +18,11 @@ type MessageMode struct {
 	t *TransportPhase
 }
 
+// Rewind implements Mode.
+func (m *MessageMode) Rewind(iter *msgpack.Iterator) {
+	iter.Rewind()
+}
+
 // String implements Mode.
 func (m *MessageMode) String() string {
 	return "MessageMode"

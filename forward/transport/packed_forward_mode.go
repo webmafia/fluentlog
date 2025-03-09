@@ -18,6 +18,11 @@ type PackedForwardMode struct {
 	hasOptions bool
 }
 
+// Rewind implements Mode.
+func (m *PackedForwardMode) Rewind(_ *msgpack.Iterator) {
+	m.iter.Rewind()
+}
+
 // String implements Mode.
 func (m *PackedForwardMode) String() string {
 	return "PackedForwardMode"
