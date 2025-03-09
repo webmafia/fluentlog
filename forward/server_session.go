@@ -8,11 +8,13 @@ import (
 	"log"
 	"net"
 	"time"
+	"unsafe"
 
 	_ "unsafe"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/ringbuf"
+	"github.com/webmafia/fluentlog/forward/transport"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
@@ -59,6 +61,7 @@ type ServerSession struct {
 	next     func(iter *msgpack.Iterator, e *Entry) error
 	modes    modes
 	mode     EventMode
+	trans    transport.TransportPhase
 	id       uint64
 }
 
@@ -134,18 +137,28 @@ func (ss *ServerSession) Log(str string, args ...any) {
 }
 
 func (ss *ServerSession) initTransportPhase() {
-	ss.modes.messageMode.ss = fast.NoescapeVal(ss)
-	ss.modes.forwardMode.ss = fast.NoescapeVal(ss)
+	// ss.modes.messageMode.ss = fast.NoescapeVal(ss)
+	// ss.modes.forwardMode.ss = fast.NoescapeVal(ss)
 
-	ss.mode = MessageMode
-	ss.next = ss.modes.messageMode.next
+	// ss.mode = MessageMode
+	// ss.next = ss.modes.messageMode.next
+
+	ss.trans.Init(&ss.serv.iterPool, &ss.serv.gzipPool, func(chunk string) (err error) {
+		ss.write.WriteMapHeader(1)
+		ss.write.WriteString("ack")
+		ss.write.WriteString(chunk)
+
+		_, err = ss.write.WriteTo(ss.conn)
+		return
+	})
 }
 
 func (ss *ServerSession) Next(e *Entry) (err error) {
-	ss.iter.Flush()
 	ss.conn.SetReadDeadline(time.Now().Add(time.Second))
 
-	return ss.next(ss.iter, fast.NoescapeVal(e))
+	return ss.trans.Next(ss.iter, (*transport.Entry)(unsafe.Pointer(e)))
+
+	// return ss.next(ss.iter, fast.NoescapeVal(e))
 }
 
 // func (ss *ServerSession) Next(e *Entry) (err error) {
