@@ -38,6 +38,7 @@ func startClient(ctx context.Context) (err error) {
 	// defer f.Close()
 
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
+		Tag:                 "foo.baz",
 		WriteBehavior:       fluentlog.Block,
 		Fallback:            fallback.NewDirBuffer("fluentlog"),
 		BufferSize:          4,
@@ -74,6 +75,7 @@ func startClient(ctx context.Context) (err error) {
 	// sub.Error("woah, something happaned")
 
 	for i := range 1_000_000 {
+		// sub.Metrics("batch", i)
 		sub.Infof("batch a: hello %d", i+1)
 	}
 

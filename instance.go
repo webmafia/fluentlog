@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
@@ -164,7 +165,7 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 	b.B = msgpack.AppendUint(b.B, id.Uint64())
 
 	b.B[x]++
-	b.B = msgpack.AppendString(b.B, "@pri")
+	b.B = msgpack.AppendString(b.B, "pri")
 	b.B = msgpack.AppendUint(b.B, uint64(sev))
 
 	b.B[x]++
@@ -193,6 +194,24 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 
 	inst.queueMessage(b)
 	return
+}
+
+func (inst *Instance) metrics(args []any) {
+	if inst.closed() {
+		return
+	}
+
+	b := inst.bufPool.Get()
+
+	b.B = msgpack.AppendArrayHeader(b.B, 3)
+	b.B = msgpack.AppendString(b.B, inst.opt.Tag)
+	b.B = msgpack.AppendTimestamp(b.B, time.Now(), msgpack.TsFluentd)
+	b.B = append(b.B, 0xde, 0, 0) // map 16
+
+	x := len(b.B) - 1
+	b.B[x] += appendArgs(b, args)
+
+	inst.queueMessage(b)
 }
 
 func (inst *Instance) queueMessage(b *buffer.Buffer) {

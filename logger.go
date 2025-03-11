@@ -85,6 +85,16 @@ func (l *Logger) Errorf(format string, args ...any) identifier.ID {
 	return l.inst.log(ERR, format, args, true, 3, l.fieldData, l.fieldCount)
 }
 
+// Logs metric values. Example usage:
+//
+//	log.Warn("hello world",
+//	    "myKey", 123,
+//	    "otherKey", 456,
+//	)
+func (l *Logger) Metrics(args ...any) {
+	l.inst.metrics(args)
+}
+
 // Acquires a new logger with meta data, that inherits any meta data from
 // the current logger. The new logger is returned, and should be released once
 // finished. Example usage:
