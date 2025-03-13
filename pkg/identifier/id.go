@@ -18,9 +18,9 @@ func (id ID) Unix() uint32 {
 	return uint32(id >> 32)
 }
 
-// Extracts sequence number (last 22 bits)
+// Extracts sequence number (last 32 bits)
 func (id ID) Seq() uint32 {
-	return uint32(id & 0x3FFFFF)
+	return uint32(id & 0xFFFFFFFF)
 }
 
 // Converts ID to time.Time
