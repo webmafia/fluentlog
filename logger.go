@@ -24,7 +24,7 @@ func NewLogger(inst *Instance) *Logger {
 //	    "otherKey", 123,
 //	)
 func (l *Logger) Debug(msg string, args ...any) identifier.ID {
-	return l.inst.log(DEBUG, msg, args, false, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(DEBUG, msg, args, false, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Info" severity, with optional meta data. Example usage:
@@ -34,7 +34,7 @@ func (l *Logger) Debug(msg string, args ...any) identifier.ID {
 //	    "otherKey", 123,
 //	)
 func (l *Logger) Info(msg string, args ...any) identifier.ID {
-	return l.inst.log(INFO, msg, args, false, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(INFO, msg, args, false, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Warning" severity, with optional meta data. Example usage:
@@ -44,7 +44,7 @@ func (l *Logger) Info(msg string, args ...any) identifier.ID {
 //	    "otherKey", 123,
 //	)
 func (l *Logger) Warn(msg string, args ...any) identifier.ID {
-	return l.inst.log(WARN, msg, args, false, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(WARN, msg, args, false, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Error" severity, with optional meta data. Example usage:
@@ -54,35 +54,35 @@ func (l *Logger) Warn(msg string, args ...any) identifier.ID {
 //	    "otherKey", 123,
 //	)
 func (l *Logger) Error(msg string, args ...any) identifier.ID {
-	return l.inst.log(ERR, msg, args, false, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(ERR, msg, args, false, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Debug" severity, with a formatted (printf) message. Example usage:
 //
 //	log.Debugf("the number is %d", 123)
 func (l *Logger) Debugf(format string, args ...any) identifier.ID {
-	return l.inst.log(DEBUG, format, args, true, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(DEBUG, format, args, true, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Info" severity, with a formatted (printf) message. Example usage:
 //
 //	log.Infof("the number is %d", 123)
 func (l *Logger) Infof(format string, args ...any) identifier.ID {
-	return l.inst.log(INFO, format, args, true, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(INFO, format, args, true, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Warning" severity, with a formatted (printf) message. Example usage:
 //
 //	log.Warnf("the number is %d", 123)
 func (l *Logger) Warnf(format string, args ...any) identifier.ID {
-	return l.inst.log(WARN, format, args, true, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(WARN, format, args, true, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs a new entry of "Error" severity, with a formatted (printf) message. Example usage:
 //
 //	log.Errorf("the number is %d", 123)
 func (l *Logger) Errorf(format string, args ...any) identifier.ID {
-	return l.inst.log(ERR, format, args, true, 3, l.fieldData, l.fieldCount)
+	return l.inst.log(ERR, format, args, true, 4, l.fieldData, l.fieldCount)
 }
 
 // Logs metric values. Example usage:
