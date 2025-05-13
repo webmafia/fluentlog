@@ -282,7 +282,7 @@ func (inst *Instance) worker() {
 }
 
 func (inst *Instance) sendToCli(b *buffer.Buffer) {
-	if _, err := inst.cli.Write(fast.NoescapeBytes(b.B)); err != nil {
+	if _, err := inst.cli.Write(fast.Noescape(b.B)); err != nil {
 		log.Println("error while writing to cli:", err)
 
 		if inst.opt.WriteBehavior == Fallback {
@@ -325,7 +325,7 @@ func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
 	// header of 2 items + the rest of the entry.
 	strip := 1 + strSize(len(inst.opt.Tag))
 	inst.opt.Fallback.Write([]byte{0x90 | 2})
-	_, err := inst.opt.Fallback.Write(fast.NoescapeBytes(b.B[strip:]))
+	_, err := inst.opt.Fallback.Write(fast.Noescape(b.B[strip:]))
 
 	inst.bufPool.Put(b)
 

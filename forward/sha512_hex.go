@@ -32,7 +32,7 @@ func sha512Hex(vals ...string) func(dst []byte) []byte {
 
 		var digest [64]byte
 
-		return hex.AppendEncode(dst, h.Sum(fast.NoescapeBytes(digest[:0])))
+		return hex.AppendEncode(dst, h.Sum(fast.Noescape(digest[:0])))
 	}
 }
 
