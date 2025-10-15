@@ -33,7 +33,7 @@ func (t *TransportPhase) Init(iterPool *msgpack.IterPool, gzipPool *gzip.Pool, a
 }
 
 func (t *TransportPhase) Next(iter *msgpack.Iterator, e *Entry) error {
-	return t.mode.Next(iter, fast.NoescapeVal(e))
+	return t.mode.Next(iter, fast.Noescape(e))
 }
 
 func (t *TransportPhase) changeMode(mode Mode, iter *msgpack.Iterator, e *Entry) (err error) {

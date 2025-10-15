@@ -6,6 +6,6 @@ go 1.24.0
 
 require (
 	github.com/klauspost/compress v1.17.11
-	github.com/webmafia/fast v0.16.0
+	github.com/webmafia/fast v0.17.0
 	github.com/webmafia/hexid v1.0.0
 )

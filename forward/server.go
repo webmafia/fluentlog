@@ -109,7 +109,7 @@ func (s *Server) Listen(ctx context.Context, handler func(ctx context.Context, s
 
 			ss.initTransportPhase()
 
-			if err := handler(ctx, fast.NoescapeVal(&ss)); err != nil && err != io.EOF {
+			if err := handler(ctx, fast.Noescape(&ss)); err != nil && err != io.EOF {
 				s.opt.HandleError(err)
 			}
 		}()
