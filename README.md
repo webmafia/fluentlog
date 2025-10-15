@@ -170,14 +170,14 @@ l := inst.Logger()
 
 ### Logging with the Logger
 
-The `Logger` type provides several methods to log messages at different severity levels. Each method returns an `identifier.ID` that can be used for tracing. For details on providing metadata, see [Structured Logging](#structured-logging).
+The `Logger` type provides several methods to log messages at different severity levels. Each method returns a [hexid](https://github.com/webmafia/hexid) that can be used for tracing. For details on providing metadata, see [Structured Logging](#structured-logging).
 
 #### Plain Messages
 
-- `l.Debug(msg string, args ...any) identifier.ID`
-- `l.Info(msg string, args ...any) identifier.ID`
-- `l.Warn(msg string, args ...any) identifier.ID`
-- `l.Error(msg string, args ...any) identifier.ID`
+- `l.Debug(msg string, args ...any) hexid.ID`
+- `l.Info(msg string, args ...any) hexid.ID`
+- `l.Warn(msg string, args ...any) hexid.ID`
+- `l.Error(msg string, args ...any) hexid.ID`
 
 Usage:
 
@@ -188,10 +188,10 @@ l.Error("Failed to connect", "reason", err)
 
 #### Formatted Messages
 
-- `l.Debugf(format string, args ...any) identifier.ID`
-- `l.Infof(format string, args ...any) identifier.ID`
-- `l.Warnf(format string, args ...any) identifier.ID`
-- `l.Errorf(format string, args ...any) identifier.ID`
+- `l.Debugf(format string, args ...any) hexid.ID`
+- `l.Infof(format string, args ...any) hexid.ID`
+- `l.Warnf(format string, args ...any) hexid.ID`
+- `l.Errorf(format string, args ...any) hexid.ID`
 
 Usage:
 

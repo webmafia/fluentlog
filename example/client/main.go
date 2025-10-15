@@ -26,9 +26,12 @@ func startClient(ctx context.Context) (err error) {
 
 	cli := forward.NewClient(addr, forward.ClientOptions{
 		Auth: forward.StaticAuthClient(forward.Credentials{
-			Username:  "foo",
-			Password:  "bar",
-			SharedKey: "secret",
+			Username:  "b258f71da107eaf2",
+			Password:  "PLG74SHNCWLJ576VZEVJ5TFNXK",
+			SharedKey: "WN6TIJGIVFEJVNB6LAUOWEF4D3",
+			// Username:  "foo",
+			// Password:  "bar",
+			// SharedKey: "secret",
 		}),
 	})
 
@@ -74,7 +77,7 @@ func startClient(ctx context.Context) (err error) {
 
 	// sub.Error("woah, something happaned")
 
-	for i := range 1_000_000 {
+	for i := range 10 {
 		// sub.Metrics("batch", i)
 		sub.Infof("batch a: hello %d", i+1)
 	}

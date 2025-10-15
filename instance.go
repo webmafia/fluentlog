@@ -11,8 +11,8 @@ import (
 	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/buffer"
 	"github.com/webmafia/fluentlog/fallback"
-	"github.com/webmafia/fluentlog/pkg/identifier"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
+	"github.com/webmafia/hexid"
 )
 
 type Instance struct {
@@ -145,13 +145,13 @@ func (inst *Instance) closed() bool {
 	}
 }
 
-func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, skipStackTrace int, extraData *buffer.Buffer, extraCount uint8) (id identifier.ID) {
+func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, skipStackTrace int, extraData *buffer.Buffer, extraCount uint8) (id hexid.ID) {
 	if inst.closed() {
 		return
 	}
 
 	b := inst.bufPool.Get()
-	id = identifier.Generate()
+	id = hexid.Generate()
 
 	b.B = msgpack.AppendArrayHeader(b.B, 3)
 	b.B = msgpack.AppendString(b.B, inst.opt.Tag)
