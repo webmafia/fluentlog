@@ -111,5 +111,5 @@ func BenchmarkServerSessionNext(b *testing.B) {
 		e.Record.Skip()
 	}
 
-	b.StopTimer()
+	b.ReportMetric(float64(len(data))/(1024*1024)/b.Elapsed().Seconds(), "MB/s")
 }
