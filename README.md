@@ -34,6 +34,9 @@
 - **Fluent Forward Protocol:**  
   The Forward client implements the [Fluent Forward protocol](https://github.com/fluent/fluentd/wiki/Forward-Protocol-Specification-v1.5), making it compatible with popular log collectors like FluentBit and Fluentd.
 
+- **Support for slog:**  
+  There is a [built-in slog handler](#support-for-slog), which is [slower](#benchmarks) than using Fluentlog directly, but handy if you really need to use slog.
+
 ## Installation
 
 Install Fluentlog and its dependencies using `go get`:
@@ -256,12 +259,39 @@ When using the fallback write behavior, Fluentlog uses a disk-based fallback mec
 
 This design helps ensure that no log messages are lost even if the primary logging destination is temporarily unreachable.
 
-## Contributing
+## Support for slog
+If you want to stick to Go's structured logging ([slog](https://go.dev/blog/slog)), you can easily use Fluentlog as a handler.
+```go
+inst, err := NewInstance(cli)
 
+if err != nil {
+	// Handle error
+}
+
+log := slog.New(inst.Logger().SlogHandler())
+```
+Remember though that slog has an overhead of [at least 200 ns per log message](#benchmarks), and might in some cases do memory allocations. If you really need raw logging performance and zero allocations, you should use Fluentlog directly.
+
+Nothing stops you from using both.
+
+## Benchmarks
+Compared with slog ([see benchmark](./slog_test.go)):
+```
+goos: darwin
+goarch: arm64
+pkg: github.com/webmafia/fluentlog
+cpu: Apple M1 Pro
+BenchmarkSlog/Fluentlog-10         	 5772764	       194.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlog/FluentlogViaSlog-10  	 2921476	       410.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlog/SlogDiscard-10       	 6027436	       198.3 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/webmafia/fluentlog	3.877s
+```
+
+## Contributing
 Contributions are welcome, but please open an issue first that describes your use case.
 
 ## License
-
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 By following the guidelines and examples above, you can integrate Fluentlog into your application, take advantage of its zero-allocation logging operations, and ensure reliable logging using the Fluent Forward protocol. Happy coding!
