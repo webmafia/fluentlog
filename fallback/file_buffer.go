@@ -7,7 +7,7 @@ import (
 	"github.com/klauspost/compress/gzip"
 )
 
-var _ io.WriteCloser = (*FileBuffer)(nil)
+var _ Fallback = (*FileBuffer)(nil)
 
 type FileBuffer struct {
 	path string
@@ -64,4 +64,16 @@ func (f *FileBuffer) Close() (err error) {
 
 	f.f = nil
 	return
+}
+
+// HasData implements Fallback.
+func (f *FileBuffer) HasData() (ok bool, err error) {
+	// TODO: Implement this method.
+	panic("unimplemented")
+}
+
+// Reader implements Fallback.
+func (f *FileBuffer) Reader(fn func(n int, r io.Reader) error) (err error) {
+	// TODO: Implement this method.
+	panic("unimplemented")
 }
