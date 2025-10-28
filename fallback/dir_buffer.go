@@ -11,7 +11,7 @@ import (
 
 const perm os.FileMode = 0600
 
-var _ io.WriteCloser = (*DirBuffer)(nil)
+var _ Fallback = (*DirBuffer)(nil)
 
 type DirBuffer struct {
 	dir     string
@@ -23,6 +23,7 @@ type DirBuffer struct {
 	mu      sync.Mutex
 }
 
+// A disk-based ping-pong buffer. Reads and writes can be done simultaneously.
 func NewDirBuffer(dir string) *DirBuffer {
 	return &DirBuffer{
 		dir:   dir,
@@ -119,7 +120,7 @@ func (f *DirBuffer) Write(p []byte) (n int, err error) {
 	return f.writeGz.Write(p)
 }
 
-func (d *DirBuffer) AnythingToRead() (ok bool, err error) {
+func (d *DirBuffer) HasData() (ok bool, err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 

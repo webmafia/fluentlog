@@ -79,7 +79,7 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 		inst.wg.Add(1)
 		go inst.fallbackWorker()
 
-		ok, err := inst.opt.Fallback.AnythingToRead()
+		ok, err := inst.opt.Fallback.HasData()
 
 		if err != nil {
 			return nil, err
