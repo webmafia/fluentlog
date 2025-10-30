@@ -21,6 +21,10 @@ func appendKeyValue(dst []byte, key string, value any) ([]byte, uint8) {
 		dst = msgpack.AppendString(dst, key)
 		dst = msgpack.AppendString(dst, val.String())
 
+	case error:
+		dst = msgpack.AppendString(dst, key)
+		dst = msgpack.AppendString(dst, val.Error())
+
 	case []byte:
 		dst = msgpack.AppendString(dst, key)
 		dst = msgpack.AppendBinary(dst, val)
