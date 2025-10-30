@@ -102,7 +102,7 @@ func TestAppendBinaryUnknownLength(t *testing.T) {
 	})
 }
 
-// mockBinaryAppender is a mock implementation of internal.BinaryAppender.
+// mockBinaryAppender is a mock implementation of encoding.BinaryAppender.
 type mockBinaryAppender struct {
 	data []byte
 }

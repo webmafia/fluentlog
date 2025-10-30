@@ -1,14 +1,14 @@
 package msgpack
 
 import (
+	"encoding"
 	"errors"
 	"strconv"
 
-	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
-var _ internal.TextAppender = (*Iterator)(nil)
+var _ encoding.TextAppender = (*Iterator)(nil)
 
 // Appends a text representation of current value to b. Implements encoding.TextAppender.
 func (iter *Iterator) AppendText(b []byte) ([]byte, error) {

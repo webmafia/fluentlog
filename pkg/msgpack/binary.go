@@ -1,8 +1,9 @@
 package msgpack
 
 import (
+	"encoding"
+
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
@@ -69,7 +70,7 @@ func ReadBinary(src []byte, offset int) (data []byte, newOffset int, err error) 
 
 // AppendBinaryAppender appends a binary object to `dst` using a `BinaryAppender`.
 // Returns the updated byte slice.
-func AppendBinaryAppender(dst []byte, s internal.BinaryAppender) []byte {
+func AppendBinaryAppender(dst []byte, s encoding.BinaryAppender) []byte {
 	return AppendBinaryUnknownLength(dst, func(dst []byte) []byte {
 		dst, _ = s.AppendBinary(dst)
 		return dst

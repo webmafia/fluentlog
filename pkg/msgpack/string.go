@@ -1,12 +1,12 @@
 package msgpack
 
 import (
+	"encoding"
 	"fmt"
 	"math"
 	"strings"
 
 	"github.com/webmafia/fast"
-	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/pkg/msgpack/types"
 )
 
@@ -92,7 +92,7 @@ func ReadStringCopy(src []byte, offset int) (s string, newOffset int, err error)
 
 // AppendTextAppender appends a string to `dst` using a `TextAppender` and encodes it as a MessagePack string.
 // Returns the updated byte slice.
-func AppendTextAppender(dst []byte, s internal.TextAppender) []byte {
+func AppendTextAppender(dst []byte, s encoding.TextAppender) []byte {
 	return AppendStringUnknownLength(dst, func(dst []byte) []byte {
 		dst, _ = s.AppendText(dst)
 		return dst

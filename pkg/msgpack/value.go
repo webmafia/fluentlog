@@ -1,6 +1,7 @@
 package msgpack
 
 import (
+	"encoding"
 	"encoding/hex"
 	"fmt"
 	"iter"
@@ -12,10 +13,10 @@ import (
 )
 
 var (
-	_ fmt.Stringer        = (Value)(nil)
-	_ fast.TextAppender   = (Value)(nil)
-	_ fast.BinaryAppender = (Value)(nil)
-	_ fast.JsonAppender   = (Value)(nil)
+	_ fmt.Stringer            = (Value)(nil)
+	_ encoding.TextAppender   = (Value)(nil)
+	_ encoding.BinaryAppender = (Value)(nil)
+	_ fast.JsonAppender       = (Value)(nil)
 )
 
 type Value []byte
@@ -228,7 +229,7 @@ func (v Value) String() string {
 	return ""
 }
 
-// AppendText implements fast.TextAppender.
+// AppendText implements encoding.TextAppender.
 func (v Value) AppendText(b []byte) ([]byte, error) {
 	switch v.Type() {
 
@@ -267,7 +268,7 @@ func (v Value) AppendText(b []byte) ([]byte, error) {
 	return b, ErrInvalidFormat
 }
 
-// AppendBinary implements fast.BinaryAppender.
+// AppendBinary implements encoding.BinaryAppender.
 func (v Value) AppendBinary(b []byte) ([]byte, error) {
 	return append(b, v...), nil
 }

@@ -1,9 +1,9 @@
 package fluentlog
 
 import (
+	"encoding"
 	"fmt"
 
-	"github.com/webmafia/fluentlog/internal"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
@@ -13,7 +13,7 @@ func appendKeyValue(dst []byte, key string, value any) ([]byte, uint8) {
 	case KeyValueAppender:
 		return val.AppendKeyValue(dst, key)
 
-	case internal.TextAppender:
+	case encoding.TextAppender:
 		dst = msgpack.AppendString(dst, key)
 		dst = msgpack.AppendTextAppender(dst, val)
 

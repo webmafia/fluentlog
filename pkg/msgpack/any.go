@@ -1,9 +1,8 @@
 package msgpack
 
 import (
+	"encoding"
 	"fmt"
-
-	"github.com/webmafia/fluentlog/internal"
 )
 
 func AppendAny(dst []byte, v any) []byte {
@@ -54,7 +53,7 @@ func AppendAny(dst []byte, v any) []byte {
 	case string:
 		dst = AppendString(dst, val)
 
-	case internal.TextAppender:
+	case encoding.TextAppender:
 		dst = AppendTextAppender(dst, val)
 
 	case fmt.Stringer:
