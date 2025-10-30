@@ -86,7 +86,8 @@ func appendKeyValue(dst []byte, key string, value any) ([]byte, uint8) {
 		dst = msgpack.AppendString(dst, val)
 
 	default:
-		return dst, 0
+		dst = msgpack.AppendString(dst, key)
+		dst = appendJSON(dst, val)
 
 	}
 
