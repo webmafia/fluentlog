@@ -3,6 +3,7 @@ package forward
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -16,18 +17,19 @@ import (
 var _ io.Writer = (*Client)(nil)
 
 type Client struct {
-	addr           string
-	conn           *net.TCPConn
-	r              msgpack.Iterator
-	w              msgpack.Writer
-	opt            ClientOptions
-	serverHostname string
-	keepAlive      bool
+    addr           string
+    conn           net.Conn
+    r              msgpack.Iterator
+    w              msgpack.Writer
+    opt            ClientOptions
+    serverHostname string
+    keepAlive      bool
 }
 
 type ClientOptions struct {
-	Hostname string
-	Auth     AuthClient
+    Hostname string
+    Auth     AuthClient
+    TLS      bool
 }
 
 func NewClient(addr string, opt ClientOptions) *Client {
@@ -40,20 +42,24 @@ func NewClient(addr string, opt ClientOptions) *Client {
 }
 
 func (c *Client) Connect(ctx context.Context) (err error) {
-	var (
-		dial net.Dialer
-		conn net.Conn
-		cred Credentials
-		ok   bool
-	)
+    var (
+        dial net.Dialer
+        conn net.Conn
+        cred Credentials
+    )
 
-	if conn, err = dial.DialContext(ctx, "tcp", c.addr); err != nil {
-		return errors.Join(ErrFailedConn, err)
-	}
+    if c.opt.TLS {
+        // Use system trust store; enable SNI from host in address.
+        if conn, err = tls.DialWithDialer(&dial, "tcp", c.addr, &tls.Config{}); err != nil {
+            return errors.Join(ErrFailedConn, err)
+        }
+    } else {
+        if conn, err = dial.DialContext(ctx, "tcp", c.addr); err != nil {
+            return errors.Join(ErrFailedConn, err)
+        }
+    }
 
-	if c.conn, ok = conn.(*net.TCPConn); !ok {
-		return ErrFailedConn
-	}
+    c.conn = conn
 
 	if cred, err = c.opt.Auth(ctx); err != nil {
 		return
