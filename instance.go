@@ -183,6 +183,7 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 		b.B[x] += extraCount
 	}
 
+	// TODO: Support for key-value pairs even when using sprintf
 	if !sprintf {
 		b.B[x] += appendArgs(b, args)
 	}
