@@ -34,7 +34,13 @@ func startClient(ctx context.Context) (err error) {
 	defer inst.Close()
 
 	l := fluentlog.NewLogger(inst)
-	l.Info("hello")
-	l.Info("world")
+	l.Info("hello",
+		"foo", 1,
+		"bar", 2,
+	)
+	l.Infof("world %s", "baz",
+		"foo", 3,
+		"bar", 4,
+	)
 	return
 }

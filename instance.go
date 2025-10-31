@@ -146,6 +146,12 @@ func (inst *Instance) closed() bool {
 }
 
 func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, skipStackTrace int, extraData *buffer.Buffer, extraCount uint8) (id hexid.ID) {
+	var fmtArgs int
+
+	if sprintf {
+		fmtArgs = countFmtArgs(msg)
+	}
+
 	if inst.closed() {
 		return
 	}
@@ -170,9 +176,9 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 
 	b.B[x]++
 	b.B = msgpack.AppendString(b.B, "message")
-	if sprintf {
+	if fmtArgs > 0 {
 		b.B = msgpack.AppendStringDynamic(b.B, func(dst []byte) []byte {
-			return fmt.Appendf(dst, msg, args...)
+			return fmt.Appendf(dst, msg, args[:fmtArgs]...)
 		})
 	} else {
 		b.B = msgpack.AppendString(b.B, msg)
@@ -183,9 +189,8 @@ func (inst *Instance) log(sev Severity, msg string, args []any, sprintf bool, sk
 		b.B[x] += extraCount
 	}
 
-	// TODO: Support for key-value pairs even when using sprintf
-	if !sprintf {
-		b.B[x] += appendArgs(b, args)
+	if len(args) > fmtArgs {
+		b.B[x] += appendArgs(b, args[fmtArgs:])
 	}
 
 	if sev <= inst.opt.StackTraceThreshold {
