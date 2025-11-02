@@ -26,6 +26,7 @@ type Instance struct {
 	close      chan struct{}       // Close channel
 	done       chan struct{}       // Done channel
 	wg         sync.WaitGroup
+	flush      func()
 }
 
 type Options struct {
@@ -46,6 +47,10 @@ func (opt *Options) setDefaults() {
 	}
 }
 
+type Flusher interface {
+	Flush() error
+}
+
 // Create a logger instance used for acquiring loggers.
 func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 	var opt Options
@@ -62,6 +67,12 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 		queue: make(chan *buffer.Buffer, opt.BufferSize),
 		close: make(chan struct{}),
 		done:  make(chan struct{}),
+	}
+
+	if f, ok := cli.(Flusher); ok {
+		inst.flush = func() { f.Flush() }
+	} else {
+		inst.flush = func() {}
 	}
 
 	if inst.opt.WriteBehavior == Fallback {
@@ -240,18 +251,21 @@ func (inst *Instance) queueMessage(b *buffer.Buffer) {
 }
 
 // The worker prioritizes any pending log messages in queue. If it's empty,
-// it's checks for any fallback buffer and handles it.
+// it checks for any fallback buffer and handles it.
 func (inst *Instance) worker() {
 	defer func() {
 		close(inst.done)
 		inst.wg.Done()
 	}()
 
+	timer := time.NewTimer(time.Millisecond)
+
 	for {
 		// First, try a non-blocking receive from the main queue.
 		select {
 		case b := <-inst.queue:
 			inst.sendToCli(b)
+			timer.Reset(time.Millisecond)
 			continue
 		default:
 			// Nothing immediately available on the main queue.
@@ -261,6 +275,7 @@ func (inst *Instance) worker() {
 		select {
 		case b := <-inst.queue:
 			inst.sendToCli(b)
+			timer.Reset(time.Millisecond)
 
 		case <-inst.fbNonEmpty:
 			err := inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
@@ -270,6 +285,9 @@ func (inst *Instance) worker() {
 			if err != nil {
 				log.Println(err)
 			}
+
+		case <-timer.C:
+			inst.flush()
 
 		case <-inst.close:
 			// Shutdown has been signaled.

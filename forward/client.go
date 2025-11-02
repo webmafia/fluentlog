@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -14,22 +15,23 @@ import (
 	"github.com/webmafia/fluentlog/pkg/msgpack"
 )
 
-var _ io.Writer = (*Client)(nil)
+var _ io.WriteCloser = (*Client)(nil)
 
 type Client struct {
-    addr           string
-    conn           net.Conn
-    r              msgpack.Iterator
-    w              msgpack.Writer
-    opt            ClientOptions
-    serverHostname string
-    keepAlive      bool
+	addr           string
+	conn           net.Conn
+	r              msgpack.Iterator
+	w              msgpack.Writer
+	bw             *bufio.Writer
+	opt            ClientOptions
+	serverHostname string
+	keepAlive      bool
 }
 
 type ClientOptions struct {
-    Hostname string
-    Auth     AuthClient
-    TLS      bool
+	Hostname string
+	Auth     AuthClient
+	TLS      bool
 }
 
 func NewClient(addr string, opt ClientOptions) *Client {
@@ -42,24 +44,26 @@ func NewClient(addr string, opt ClientOptions) *Client {
 }
 
 func (c *Client) Connect(ctx context.Context) (err error) {
-    var (
-        dial net.Dialer
-        conn net.Conn
-        cred Credentials
-    )
+	var (
+		dial net.Dialer
+		tcp  *net.TCPConn
+		ok   bool
+		cred Credentials
+	)
 
-    if c.opt.TLS {
-        // Use system trust store; enable SNI from host in address.
-        if conn, err = tls.DialWithDialer(&dial, "tcp", c.addr, &tls.Config{}); err != nil {
-            return errors.Join(ErrFailedConn, err)
-        }
-    } else {
-        if conn, err = dial.DialContext(ctx, "tcp", c.addr); err != nil {
-            return errors.Join(ErrFailedConn, err)
-        }
-    }
+	if conn, err := dial.DialContext(ctx, "tcp", c.addr); err != nil {
+		return errors.Join(ErrFailedConn, err)
+	} else if tcp, ok = conn.(*net.TCPConn); !ok {
+		return errors.New("invalid TCP connection")
+	}
 
-    c.conn = conn
+	tcp.SetNoDelay(true)
+
+	if c.opt.TLS {
+		c.conn = tls.Client(tcp, &tls.Config{InsecureSkipVerify: true})
+	} else {
+		c.conn = tcp
+	}
 
 	if cred, err = c.opt.Auth(ctx); err != nil {
 		return
@@ -88,6 +92,8 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 		return
 	}
 
+	c.bw = bufio.NewWriterSize(c.conn, 8*1024)
+
 	return
 }
 
@@ -112,7 +118,21 @@ func (c *Client) Write(b []byte) (n int, err error) {
 		return
 	}
 
-	return c.conn.Write(b)
+	return c.bw.Write(b)
+	// return c.conn.Write(b)
+}
+
+func (c *Client) Flush() error {
+	if c.bw == nil {
+		return nil
+	}
+
+	return c.bw.Flush()
+}
+
+// Close implements io.WriteCloser.
+func (c *Client) Close() error {
+	return c.Flush()
 }
 
 func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
