@@ -1,12 +1,12 @@
 package forward
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"time"
 
@@ -22,7 +22,6 @@ type Client struct {
 	conn           net.Conn
 	r              msgpack.Iterator
 	w              msgpack.Writer
-	bw             *bufio.Writer
 	opt            ClientOptions
 	serverHostname string
 	keepAlive      bool
@@ -92,8 +91,6 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 		return
 	}
 
-	c.bw = bufio.NewWriterSize(c.conn, 8*1024)
-
 	return
 }
 
@@ -118,21 +115,26 @@ func (c *Client) Write(b []byte) (n int, err error) {
 		return
 	}
 
-	return c.bw.Write(b)
-	// return c.conn.Write(b)
+	return c.conn.Write(b)
 }
 
-func (c *Client) Flush() error {
-	if c.bw == nil {
-		return nil
+func (c *Client) Reconnect() (err error) {
+	log.Println("Reconnecting...")
+
+	if err = c.Close(); err != nil {
+		return
 	}
 
-	return c.bw.Flush()
+	return c.ensureConnection()
 }
 
 // Close implements io.WriteCloser.
 func (c *Client) Close() error {
-	return c.Flush()
+	if c.conn == nil {
+		return nil
+	}
+
+	return c.conn.Close()
 }
 
 func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
