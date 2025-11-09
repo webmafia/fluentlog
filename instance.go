@@ -21,10 +21,10 @@ type Instance struct {
 	bufPool buffer.Pool         // Pool of buffers
 	logPool sync.Pool           // Pool of loggers
 	queue   chan *buffer.Buffer // Main queue (buffered)
-	fbQueue chan *buffer.Buffer // Fallback queue (unbuffered)
 	close   chan struct{}       // Close channel
 	done    chan struct{}       // Done channel
 	wg      sync.WaitGroup
+	fb      bool
 }
 
 type Options struct {
@@ -76,10 +76,8 @@ func NewInstance(cli io.Writer, options ...Options) (*Instance, error) {
 			return nil, errors.New("WriteBehavior set to 'Fallback', but client doesn't implement BatchWriter")
 		}
 
-		inst.fbQueue = make(chan *buffer.Buffer)
-
-		inst.wg.Add(1)
-		go inst.fallbackWorker()
+		// inst.wg.Add(1)
+		// go inst.fallbackWorker()
 	}
 
 	inst.wg.Add(1)
@@ -221,10 +219,8 @@ func (inst *Instance) queueMessage(b *buffer.Buffer) {
 	// If the queue is full
 	default:
 		switch inst.opt.WriteBehavior {
-		case Block:
+		case Block, Fallback:
 			inst.queue <- b
-		case Fallback:
-			inst.fbQueue <- b
 		default:
 			inst.bufPool.Put(b)
 		}
@@ -239,11 +235,15 @@ func (inst *Instance) worker() {
 		inst.wg.Done()
 	}()
 
-	if err := inst.flushFallbackToCli(); err != nil {
-		log.Println("failed to flush fallback to cli")
+	if err := inst.maybeSetFb(); err != nil {
+		log.Println("failed to set fb")
 	}
 
-	fallbackTicker := time.NewTicker(30 * time.Second)
+	if err := inst.flushFallbackToCli(); err != nil {
+		log.Println("failed to flush fallback to cli:", err)
+	}
+
+	fallbackTicker := time.NewTicker(10 * time.Second)
 
 	for {
 		// First, try a non-blocking receive from the main queue.
@@ -262,7 +262,7 @@ func (inst *Instance) worker() {
 
 		case <-fallbackTicker.C:
 			if err := inst.flushFallbackToCli(); err != nil {
-				log.Println("failed to flush fallback to cli")
+				log.Println("failed to flush fallback to cli:", err)
 			}
 
 		case <-inst.close:
@@ -281,79 +281,23 @@ func (inst *Instance) worker() {
 	}
 }
 
-func (inst *Instance) flushFallbackToCli() (err error) {
-	if inst.opt.Fallback == nil {
-		return
-	}
-
-	var ok bool
-
-	if ok, err = inst.opt.Fallback.HasData(); !ok || err != nil {
-		return
-	}
-
-	err = inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
-		return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
-	})
-
-	if err != nil {
-		if cli, ok := inst.cli.(Reconnector); ok {
-			if err = cli.Reconnect(); err != nil {
-				return
-			}
-
-			err = inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
-				return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
-			})
-		}
-	}
-
-	return
-}
-
 func (inst *Instance) sendToCli(b *buffer.Buffer) {
+	if inst.fb {
+		inst.sendToFallbackCli(b)
+		return
+	}
+
 	if _, err := inst.cli.Write(fast.Noescape(b.B)); err != nil {
 		log.Println("error while writing to cli:", err)
 
 		if inst.opt.WriteBehavior == Fallback {
-			inst.fbQueue <- b
+			inst.fb = true
+			inst.sendToFallbackCli(b)
 			return
-		}
-
-		if cli, ok := inst.cli.(Reconnector); ok {
-			if err = cli.Reconnect(); err != nil {
-				log.Println("error while trying to reconnect:", err)
-			} else if _, err = inst.cli.Write(fast.Noescape(b.B)); err != nil {
-				log.Println("error while writing to cli (second try):", err)
-			}
 		}
 	}
 
 	inst.bufPool.Put(b)
-}
-
-func (inst *Instance) fallbackWorker() {
-	defer inst.wg.Done()
-
-	for {
-		select {
-		case b := <-inst.fbQueue:
-			inst.sendToFallbackCli(b)
-		case <-inst.done:
-			// Shutdown has been signaled.
-			// Drain any remaining messages on the fallback queue.
-			for {
-				select {
-				case b := <-inst.fbQueue:
-					inst.sendToFallbackCli(b)
-				default:
-					// No more messages; exit the worker.
-					return
-				}
-			}
-		}
-
-	}
 }
 
 func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
@@ -371,6 +315,42 @@ func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
 	if err != nil {
 		log.Println(err)
 	}
+}
+
+func (inst *Instance) flushFallbackToCli() (err error) {
+	if !inst.fb {
+		return
+	}
+
+	err = inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
+		return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
+	})
+
+	if err != nil {
+		if cli, ok := inst.cli.(Reconnector); ok {
+			if err = cli.Reconnect(); err != nil {
+				return
+			}
+
+			if err = inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
+				return inst.cli.(BatchWriter).WriteBatch(inst.opt.Tag, size, r)
+			}); err != nil {
+				return
+			}
+		}
+	}
+
+	inst.fb = false
+
+	return
+}
+
+func (inst *Instance) maybeSetFb() (err error) {
+	if inst.opt.WriteBehavior == Fallback {
+		inst.fb, err = inst.opt.Fallback.HasData()
+	}
+
+	return
 }
 
 func strSize(l int) int {

@@ -129,12 +129,14 @@ func (c *Client) Reconnect() (err error) {
 }
 
 // Close implements io.WriteCloser.
-func (c *Client) Close() error {
+func (c *Client) Close() (err error) {
 	if c.conn == nil {
 		return nil
 	}
 
-	return c.conn.Close()
+	err = c.conn.Close()
+	c.conn = nil
+	return
 }
 
 func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
