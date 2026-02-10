@@ -3,8 +3,8 @@ package transport
 import (
 	"fmt"
 	"io"
+	"strings"
 
-	"github.com/webmafia/fast"
 	"github.com/webmafia/fast/ringbuf"
 	"github.com/webmafia/fluentlog/internal/gzip"
 	"github.com/webmafia/fluentlog/pkg/msgpack"
@@ -17,7 +17,7 @@ type CompressedPackedForwardMode struct {
 	t          *TransportPhase
 	iter       *msgpack.Iterator
 	gzip       *gzip.Reader
-	tag        []byte
+	tag        string
 	hasOptions bool
 }
 
@@ -39,7 +39,7 @@ func (m *CompressedPackedForwardMode) Enter(origIter *msgpack.Iterator, e *Entry
 	}
 
 	m.iter = m.t.iterPool.Get(m.gzip)
-	m.tag = append(m.tag[:0], e.Tag...)
+	m.tag = strings.Clone(e.Tag)
 	m.hasOptions = hasOptions
 
 	return m.t.changeMode(m, origIter, e)
@@ -67,7 +67,7 @@ func (m *CompressedPackedForwardMode) Next(origIter *msgpack.Iterator, e *Entry)
 		return m.t.errorNoEof("time", err)
 	}
 
-	e.Tag = fast.BytesToString(m.tag)
+	e.Tag = m.tag
 	e.Timestamp = m.iter.Time()
 
 	// 2) Record
