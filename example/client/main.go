@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/webmafia/fluentlog"
 	"github.com/webmafia/fluentlog/fallback"
@@ -21,30 +22,21 @@ func main() {
 }
 
 func startClient(ctx context.Context) (err error) {
-	// addr := "localhost:24224"
-	addr := "localhost:24284"
+	addr := "localhost:24224"
+	// addr := "localhost:24284"
+	// addr := "api.log.center:24224"
 
 	cli := forward.NewClient(addr, forward.ClientOptions{
 		Auth: forward.StaticAuthClient(forward.Credentials{
-			Username:  "b258f71da107eaf2",
-			Password:  "PLG74SHNCWLJ576VZEVJ5TFNXK",
-			SharedKey: "WN6TIJGIVFEJVNB6LAUOWEF4D3",
-			// Username:  "foo",
-			// Password:  "bar",
-			// SharedKey: "secret",
+			SharedKey: "secret",
 		}),
 	})
-
-	// _ = cli
-
-	// f := filebuf.NewFileBuffer("log-buffer.bin")
-	// defer f.Close()
 
 	inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 		Tag:                 "foo.baz",
 		WriteBehavior:       fluentlog.Block,
 		Fallback:            fallback.NewDirBuffer("fluentlog"),
-		BufferSize:          4,
+		BufferSize:          16,
 		StackTraceThreshold: fluentlog.NOTICE,
 	})
 
@@ -55,12 +47,6 @@ func startClient(ctx context.Context) (err error) {
 	defer inst.Close()
 
 	l := fluentlog.NewLogger(inst)
-
-	sub := l.With(
-		"valueFrom", "subLogger",
-	)
-
-	defer sub.Release()
 
 	// var wg sync.WaitGroup
 	// wg.Add(1)
@@ -77,10 +63,17 @@ func startClient(ctx context.Context) (err error) {
 
 	// sub.Error("woah, something happaned")
 
-	for i := range 10 {
-		// sub.Metrics("batch", i)
-		sub.Infof("batch a: hello %d", i+1)
+	start := time.Now()
+	var i int
+
+	for ctx.Err() == nil {
+		l.Infof("hello %d", i+1)
+		time.Sleep(500 * time.Millisecond)
+		i++
 	}
+
+	dur := time.Since(start)
+	log.Printf("done in %s\n", dur)
 
 	// time.Sleep(2 * time.Second)
 
