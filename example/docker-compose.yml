@@ -1,9 +1,10 @@
 services:
   fluent-bit:
-    image: fluent/fluent-bit:3.2.8
+    image: fluent/fluent-bit:4.2.2
     ports:
       - 127.0.0.1:24224:24224
       - 127.0.0.1:5140:5140
     volumes:
       - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
       - ./parsers.conf:/fluent-bit/etc/parsers.conf
+    env_file: .env
