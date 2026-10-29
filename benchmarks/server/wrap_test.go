@@ -24,6 +24,7 @@ func TestWrap(t *testing.T) {
 		}
 
 		count++
+		iter.Flush()
 	}
 
 	if err := iter.Error(); err != nil && err != io.EOF {

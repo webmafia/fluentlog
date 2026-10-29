@@ -236,7 +236,7 @@ Fluentlog supports three write behavior modes via the `Options.WriteBehavior` se
   Log messages are dropped if the queue is full. This prevents blocking but may lead to data loss during peak logging periods.
 
 - **Fallback:**  
-  When the queue is full, log messages are written to a fallback buffer on disk. This mode prevents both blocking and data loss. *(Requires that the client implements the `BatchWriter` interface.)*
+  When the queue is full, log messages are written to a fallback buffer on disk. Overflow does not wait for the network worker, but compression and local disk I/O can still delay the logging call. *(Requires that the client implements the `BatchWriter` interface.)*
 
 Set the mode when creating the logger instance:
 
@@ -249,15 +249,11 @@ inst, err := fluentlog.NewInstance(cli, fluentlog.Options{
 
 ## Fallback Buffer
 
-When using the fallback write behavior, Fluentlog uses a disk-based fallback mechanism (e.g., `DirBuffer`) to temporarily store log messages. Key points include:
+In `Fallback` mode, normal log calls enqueue records in memory for background delivery. When the main queue is full, the calling goroutine writes the record to the existing compressed disk buffer. This path is independent of network delivery, but it can wait for compression and local disk I/O.
 
-- **Fallback Queue:**  
-  An unbuffered channel to queue messages when the main queue is full.
+The background delivery worker also buffers records after a client write fails. It checks for buffered records at startup and every ten seconds, including while the main queue is busy. A failed batch remains buffered for another delivery attempt.
 
-- **Fallback Worker:**  
-  A dedicated goroutine that writes queued messages to disk and later attempts to flush them to the logging destination.
-
-This design helps ensure that no log messages are lost even if the primary logging destination is temporarily unreachable.
+`DirBuffer` uses compressed ping-pong files so new records can be appended while a previous batch is being delivered. The Forward client applies a three-second timeout to each bounded chunk of a batch, allowing a complete batch transfer to take longer than three seconds.
 
 ## Support for slog
 If you want to stick to Go's structured logging ([slog](https://go.dev/blog/slog)), you can easily use Fluentlog as a handler.

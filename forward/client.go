@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/webmafia/fast"
@@ -25,6 +26,9 @@ type Client struct {
 	opt            ClientOptions
 	serverHostname string
 	keepAlive      bool
+
+	batchWriter batchWriter
+	fileReader  batchFileReader
 }
 
 type ClientOptions struct {
@@ -58,11 +62,30 @@ func (c *Client) Connect(ctx context.Context) (err error) {
 
 	tcp.SetNoDelay(true)
 
+	// DialContext does not apply its deadline to the authentication handshake.
+	deadline := time.Now().Add(3 * time.Second)
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		deadline = ctxDeadline
+	}
+	if err = tcp.SetDeadline(deadline); err != nil {
+		tcp.Close()
+		return
+	}
+
 	if c.opt.TLS {
 		c.conn = tls.Client(tcp, &tls.Config{InsecureSkipVerify: true})
 	} else {
 		c.conn = tcp
 	}
+
+	defer func() {
+		if err == nil {
+			err = c.conn.SetDeadline(time.Time{})
+		}
+		if err != nil {
+			c.Close()
+		}
+	}()
 
 	if cred, err = c.opt.Auth(ctx); err != nil {
 		return
@@ -115,7 +138,13 @@ func (c *Client) Write(b []byte) (n int, err error) {
 		return
 	}
 
-	return c.conn.Write(b)
+	if err = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err == nil {
+		n, err = c.conn.Write(b)
+	}
+	if err != nil {
+		c.Close()
+	}
+	return
 }
 
 func (c *Client) Reconnect() (err error) {
@@ -144,6 +173,22 @@ func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
 		return
 	}
 
+	// Keep the original file visible to Linux TCP ReaderFrom instead of File.WriterTo.
+	if _, file := r.(*os.File); file {
+		c.fileReader.Reader = r
+		r = &c.fileReader
+	}
+	c.batchWriter.Conn = c.conn
+	c.batchWriter.size = int64(size)
+	c.w.Reset(&c.batchWriter)
+	defer func() {
+		c.batchWriter.Conn = nil
+		c.fileReader.Reader = nil
+		if err != nil {
+			c.Close()
+		}
+	}()
+
 	c.w.WriteArrayHeader(3)
 
 	// 1. Tag (string)
@@ -161,3 +206,58 @@ func (c *Client) WriteBatch(tag string, size int, r io.Reader) (err error) {
 
 	return c.w.Flush()
 }
+
+// Refresh deadlines between bounded writes, while preserving file-to-TCP
+// streaming through ReaderFrom and reusing a buffer for other connections.
+type batchWriter struct {
+	net.Conn
+	reader io.LimitedReader
+	buf    []byte
+	size   int64
+}
+
+func (w *batchWriter) Write(p []byte) (n int, err error) {
+	for len(p) > 0 {
+		size := min(len(p), 64*1024)
+		if err = w.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			return
+		}
+		written, writeErr := w.Conn.Write(p[:size])
+		n += written
+		if writeErr != nil {
+			return n, writeErr
+		}
+		if written != size {
+			return n, io.ErrShortWrite
+		}
+		p = p[size:]
+	}
+	return
+}
+
+func (w *batchWriter) ReadFrom(r io.Reader) (n int64, err error) {
+	if source, ok := r.(*batchFileReader); ok {
+		r = source.Reader
+	}
+	// TCP can transfer files directly. TLS and other connections need a reusable copy buffer.
+	if _, tcp := w.Conn.(*net.TCPConn); !tcp && w.buf == nil {
+		w.buf = make([]byte, 64*1024)
+	}
+	w.reader.R = r
+	defer func() { w.reader.R = nil }()
+	for n < w.size {
+		w.reader.N = min(w.size-n, 64*1024)
+		if err = w.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			return
+		}
+		written, copyErr := io.CopyBuffer(w.Conn, &w.reader, w.buf)
+		n += written
+		if copyErr != nil || w.reader.N > 0 {
+			return n, copyErr
+		}
+	}
+	return
+}
+
+// Keep files from invoking WriterTo before the chunked transfer is selected.
+type batchFileReader struct{ io.Reader }

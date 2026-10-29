@@ -91,11 +91,26 @@ func ExampleReader_Reset() {
 		panic(err)
 	}
 
-	if err := r.Reset(nil); err != nil {
+	for range 2 {
+		br := ringbuf.NewReader(bytes.NewReader(buf.Bytes())).LimitReader(buf.Len())
+		if err := r.Reset(br); err != nil {
+			panic(err)
+		}
+
+		data, err := io.ReadAll(r)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(data))
+	}
+
+	if err := r.Close(); err != nil {
 		panic(err)
 	}
 
-	// Output: TODO
+	// Output:
+	// A long time ago in a galaxy far, far away...
+	// A long time ago in a galaxy far, far away...
 }
 
 func BenchmarkReader_Reset(b *testing.B) {

@@ -25,6 +25,8 @@ type Instance struct {
 	done    chan struct{}       // Done channel
 	wg      sync.WaitGroup
 	fb      bool
+
+	fallbackMu sync.Mutex // Coordinates overflow producers with closing the disk buffer.
 }
 
 type Options struct {
@@ -114,7 +116,10 @@ func (inst *Instance) Close() (err error) {
 	inst.wg.Wait()
 
 	if inst.opt.Fallback != nil {
-		if err = inst.opt.Fallback.Close(); err != nil {
+		inst.fallbackMu.Lock()
+		err = inst.opt.Fallback.Close()
+		inst.fallbackMu.Unlock()
+		if err != nil {
 			return
 		}
 	}
@@ -219,16 +224,24 @@ func (inst *Instance) queueMessage(b *buffer.Buffer) {
 	// If the queue is full
 	default:
 		switch inst.opt.WriteBehavior {
-		case Block, Fallback:
+		case Block:
 			inst.queue <- b
+		case Fallback:
+			// A stalled network worker must not block overflow producers.
+			inst.fallbackMu.Lock()
+			if inst.closed() {
+				inst.bufPool.Put(b)
+			} else {
+				inst.sendToFallbackCli(b)
+			}
+			inst.fallbackMu.Unlock()
 		default:
 			inst.bufPool.Put(b)
 		}
 	}
 }
 
-// The worker prioritizes any pending log messages in queue. If it's empty,
-// it checks for any fallback buffer and handles it.
+// The worker handles queued messages and periodically retries the fallback buffer.
 func (inst *Instance) worker() {
 	defer func() {
 		close(inst.done)
@@ -250,6 +263,16 @@ func (inst *Instance) worker() {
 		select {
 		case b := <-inst.queue:
 			inst.sendToCli(b)
+			if inst.opt.WriteBehavior == Fallback {
+				// A continuously busy queue must not starve disk replay.
+				select {
+				case <-fallbackTicker.C:
+					if err := inst.flushFallbackToCli(); err != nil {
+						log.Println("failed to flush fallback to cli:", err)
+					}
+				default:
+				}
+			}
 			continue
 		default:
 			// Nothing immediately available on the main queue.
@@ -306,8 +329,9 @@ func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
 	// For this reason, we must strip away the original array header + the tag string, then write an array
 	// header of 2 items + the rest of the entry.
 	strip := 1 + strSize(len(inst.opt.Tag))
-	inst.opt.Fallback.Write([]byte{0x90 | 2})
-	_, err := inst.opt.Fallback.Write(fast.Noescape(b.B[strip:]))
+	// Keep each record in one Write so concurrent overflow producers cannot interleave it.
+	b.B[strip-1] = 0x92
+	_, err := inst.opt.Fallback.Write(fast.Noescape(b.B[strip-1:]))
 
 	inst.bufPool.Put(b)
 
@@ -318,8 +342,12 @@ func (inst *Instance) sendToFallbackCli(b *buffer.Buffer) {
 }
 
 func (inst *Instance) flushFallbackToCli() (err error) {
-	if !inst.fb {
+	if inst.opt.WriteBehavior != Fallback {
 		return
+	}
+	// Overflow can populate the disk buffer even while network writes succeed.
+	if hasData, checkErr := inst.opt.Fallback.HasData(); checkErr != nil || !hasData {
+		return checkErr
 	}
 
 	err = inst.opt.Fallback.Reader(func(size int, r io.Reader) error {
